@@ -89,82 +89,116 @@ function saveGames(games) {
 
 // ─── CSV Export ───────────────────────────────────────────────────────────────
 function exportCSV(game) {
-  const lines = ['Atleta,Time,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG3M,FG3A,FTM,FTA,FG%,3P%,LL%,FALTAS'];
+  const lines = [
+    'Tipo,Atleta,Time,X,Y,Acerto,3PTS,Período,Tempo'
+  ];
+
   game.teams.forEach(team => {
     team.players.forEach(p => {
-      const fg = pct(p.fg2m+p.fg3m, p.fg2a+p.fg3a);
-      const tp = pct(p.fg3m, p.fg3a);
-      const ft = pct(p.ftm, p.fta);
-      lines.push(`"#${p.number} ${p.name}","${team.name}",${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${p.fg3m},${p.fg3a},${p.ftm},${p.fta},${fg},${tp},${ft},${p.fouls}`);
+      (p.shots || []).forEach(s => {
+        lines.push([
+          'SHOT',
+          `#${p.number} ${p.name}`,
+          team.name,
+          s.x.toFixed(2),
+          s.y.toFixed(2),
+          s.made ? 1 : 0,
+          s.three ? 1 : 0,
+          game.quarter,
+          '' // pode melhorar depois
+        ].join(','));
+      });
     });
-    const tot = totals(team);
-    lines.push(`"TOTAL","${team.name}",${tot.pts},${tot.ast},${tot.reb},${tot.oreb},${tot.stl},${tot.blk},${tot.to},${tot.fg2m},${tot.fg2a},${tot.fg3m},${tot.fg3a},${tot.ftm},${tot.fta},${pct(tot.fg2m+tot.fg3m,tot.fg2a+tot.fg3a)},${pct(tot.fg3m,tot.fg3a)},${pct(tot.ftm,tot.fta)},${tot.fouls}`);
   });
-  const blob = new Blob(['\ufeff'+lines.join('\n')], {type:'text/csv;charset=utf-8'});
+
+  // mantém stats abaixo (opcional)
+  lines.push('');
+  lines.push('--- STATS ---');
+
+  game.teams.forEach(team => {
+    team.players.forEach(p => {
+      lines.push([
+        'STAT',
+        `#${p.number} ${p.name}`,
+        team.name,
+        p.pts,
+        p.ast,
+        p.reb,
+        p.to
+      ].join(','));
+    });
+  });
+
+  const blob = new Blob(['\ufeff' + lines.join('\n')], {
+    type: 'text/csv;charset=utf-8'
+  });
+
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `scout_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`;
+  a.download = `scout_heatmap_${Date.now()}.csv`;
   a.click();
 }
 
 // ─── Shot Map Component ───────────────────────────────────────────────────────
 function ShotMap({ shots = [] }) {
-  const made   = shots.filter(s => s.made);
+  const made = shots.filter(s => s.made);
   const missed = shots.filter(s => !s.made);
-
-  const zoneSummary = COURT_ZONES.map(z => {
-    const zShots = shots.filter(s => s.zone === z.id);
-    const zMade  = zShots.filter(s => s.made).length;
-    return { ...z, made: zMade, total: zShots.length };
-  });
 
   return (
     <div className="shot-map-wrap">
-      <svg viewBox="0 0 100 80" className="court-svg" preserveAspectRatio="xMidYMid meet">
-        {/* Court outline */}
-        <rect x="0" y="0" width="100" height="80" fill="#1a1f2a" rx="2"/>
-        {/* Paint */}
-        <rect x="0" y="30" width="19" height="35" fill="none" stroke="#2a3040" strokeWidth="0.5"/>
-        <rect x="81" y="30" width="19" height="35" fill="none" stroke="#2a3040" strokeWidth="0.5"/>
-        {/* 3pt arc approximate */}
-        <path d="M 0,25 Q 30,5 50,5 Q 70,5 100,25" fill="none" stroke="#2a3040" strokeWidth="0.5"/>
-        <line x1="0" y1="25" x2="0" y2="80" stroke="#2a3040" strokeWidth="0.5"/>
-        <line x1="100" y1="25" x2="100" y2="80" stroke="#2a3040" strokeWidth="0.5"/>
-        {/* Basket */}
-        <circle cx="7" cy="55" r="2" fill="none" stroke="#f97316" strokeWidth="0.6"/>
-        <circle cx="93" cy="55" r="2" fill="none" stroke="#f97316" strokeWidth="0.6"/>
+      <svg viewBox="0 0 280 150" className="court-svg">
 
-        {/* Zone heatmap */}
-        {zoneSummary.map(z => z.total > 0 && (
-          <g key={z.id}>
-            <rect x={z.x} y={z.y} width={z.w} height={z.h}
-              fill={z.made/z.total > 0.5 ? '#22c55e' : '#ef4444'}
-              opacity={0.15 + Math.min(z.total/5, 0.4)} rx="1"/>
-            <text x={z.x+z.w/2} y={z.y+z.h/2+1}
-              textAnchor="middle" fontSize="4" fill="#e2e8f0" fontWeight="bold">
-              {z.made}/{z.total}
-            </text>
-          </g>
-        ))}
+        {/* Fundo */}
+        <rect x="0" y="0" width="280" height="150" fill="#1a1f2a" />
 
-        {/* Shot dots */}
+        {/* Linha de fundo */}
+        <line x1="0" y1="150" x2="280" y2="150" stroke="#fff" strokeWidth="1"/>
+
+        {/* Garrafão */}
+        <rect x="110" y="0" width="60" height="60" fill="none" stroke="#fff"/>
+
+        {/* Círculo lance livre */}
+        <circle cx="140" cy="60" r="18" fill="none" stroke="#fff"/>
+
+        {/* Cesta */}
+        <circle cx="140" cy="10" r="1.5" fill="#f97316"/>
+
+        {/* Tabela */}
+        <line x1="130" y1="5" x2="150" y2="5" stroke="#fff"/>
+
+        {/* Arco de 3 */}
+        <path
+          d="M 40 0 A 100 100 0 0 1 240 0"
+          fill="none"
+          stroke="#fff"
+        />
+
+        {/* Corner 3 */}
+        <line x1="40" y1="0" x2="40" y2="30" stroke="#fff"/>
+        <line x1="240" y1="0" x2="240" y2="30" stroke="#fff"/>
+
+        {/* Meio círculo restrito */}
+        <circle cx="140" cy="10" r="6" fill="none" stroke="#fff"/>
+
+        {/* Arremessos */}
         {missed.map((s, i) => (
-          <g key={`m${i}`}>
-            <line x1={s.x-1.2} y1={s.y-1.2} x2={s.x+1.2} y2={s.y+1.2} stroke="#ef4444" strokeWidth="0.7"/>
-            <line x1={s.x+1.2} y1={s.y-1.2} x2={s.x-1.2} y2={s.y+1.2} stroke="#ef4444" strokeWidth="0.7"/>
-          </g>
+          <line key={i}
+            x1={s.x-1} y1={s.y-1}
+            x2={s.x+1} y2={s.y+1}
+            stroke="red"
+          />
         ))}
-        {made.map((s, i) => (
-          <circle key={`k${i}`} cx={s.x} cy={s.y} r="1.3" fill="#22c55e" opacity="0.9"/>
-        ))}
-      </svg>
 
-      <div className="shot-legend">
-        <span className="legend-item made">● Convertido ({made.length})</span>
-        <span className="legend-item missed">✕ Errado ({missed.length})</span>
-        {made.length + missed.length > 0 &&
-          <span className="legend-item pct">{pct(made.length, made.length+missed.length)} FG</span>}
-      </div>
+        {made.map((s, i) => (
+          <circle key={i}
+            cx={s.x}
+            cy={s.y}
+            r="1.5"
+            fill="green"
+          />
+        ))}
+
+      </svg>
     </div>
   );
 }
@@ -319,8 +353,8 @@ export default function App() {
   const handleCourtClick = useCallback(e => {
     if (!shotMode || shotPlayer === null || !courtRef.current) return;
     const rect = courtRef.current.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width * 100);
-    const y = ((e.clientY - rect.top) / rect.height * 80);
+    const x = ((e.clientX - rect.left) / rect.width * 280);
+    const y = ((e.clientY - rect.top) / rect.height * 150);
     const isThree = y < 25 || (x < 20 && y > 25) || (x > 80 && y > 25);
     const zone = COURT_ZONES.find(z => x>=z.x && x<=z.x+z.w && y>=z.y && y<=z.y+z.h)?.id || 'unknown';
     const made = window.confirm(`Arremesso ${isThree?'de 3':'de 2'} convertido?`);
