@@ -410,7 +410,7 @@ export default function App() {
   // ── GAME SCREEN ────────────────────────────────────────────────────────────
   const td = game.teams[activeTeam];
   const sp = selectedPlayer !== null ? td.players[selectedPlayer] : null;
-  const allShots = game.teams.flatMap(t => t.players.flatMap(p => (p.shots||[]).map(s => ({...s, team: t.name}))));
+  //const allShots = game.teams.flatMap(t => t.players.flatMap(p => (p.shots||[]).map(s => ({...s, team: t.name}))));
 
   return (
     <div className="app">
