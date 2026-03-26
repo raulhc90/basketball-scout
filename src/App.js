@@ -89,53 +89,21 @@ function saveGames(games) {
 
 // ─── CSV Export ───────────────────────────────────────────────────────────────
 function exportCSV(game) {
-  const lines = [
-    'Tipo,Atleta,Time,X,Y,Acerto,3PTS,Período,Tempo'
-  ];
-
+  const lines = ['Atleta,Time,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG3M,FG3A,FTM,FTA,FG%,3P%,LL%,FALTAS'];
   game.teams.forEach(team => {
     team.players.forEach(p => {
-      (p.shots || []).forEach(s => {
-        lines.push([
-          'SHOT',
-          `#${p.number} ${p.name}`,
-          team.name,
-          s.x.toFixed(2),
-          s.y.toFixed(2),
-          s.made ? 1 : 0,
-          s.three ? 1 : 0,
-          game.quarter,
-          '' // pode melhorar depois
-        ].join(','));
-      });
+      const fg = pct(p.fg2m+p.fg3m, p.fg2a+p.fg3a);
+      const tp = pct(p.fg3m, p.fg3a);
+      const ft = pct(p.ftm, p.fta);
+      lines.push(`"#${p.number} ${p.name}","${team.name}",${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${p.fg3m},${p.fg3a},${p.ftm},${p.fta},${fg},${tp},${ft},${p.fouls}`);
     });
+    const tot = totals(team);
+    lines.push(`"TOTAL","${team.name}",${tot.pts},${tot.ast},${tot.reb},${tot.oreb},${tot.stl},${tot.blk},${tot.to},${tot.fg2m},${tot.fg2a},${tot.fg3m},${tot.fg3a},${tot.ftm},${tot.fta},${pct(tot.fg2m+tot.fg3m,tot.fg2a+tot.fg3a)},${pct(tot.fg3m,tot.fg3a)},${pct(tot.ftm,tot.fta)},${tot.fouls}`);
   });
-
-  // mantém stats abaixo (opcional)
-  lines.push('');
-  lines.push('--- STATS ---');
-
-  game.teams.forEach(team => {
-    team.players.forEach(p => {
-      lines.push([
-        'STAT',
-        `#${p.number} ${p.name}`,
-        team.name,
-        p.pts,
-        p.ast,
-        p.reb,
-        p.to
-      ].join(','));
-    });
-  });
-
-  const blob = new Blob(['\ufeff' + lines.join('\n')], {
-    type: 'text/csv;charset=utf-8'
-  });
-
+  const blob = new Blob(['\ufeff'+lines.join('\n')], {type:'text/csv;charset=utf-8'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `scout_heatmap_${Date.now()}.csv`;
+  a.download = `scout_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`;
   a.click();
 }
 
