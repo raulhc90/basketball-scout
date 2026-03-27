@@ -247,3 +247,275 @@ td[data-warn=true] { color:var(--yellow); font-weight:700; }
 ::-webkit-scrollbar { width:4px; height:4px; }
 ::-webkit-scrollbar-track { background:var(--bg2); }
 ::-webkit-scrollbar-thumb { background:var(--bg4); border-radius:2px; }
+
+/* ═══════════════════════════════════════════════════════
+   LANDSCAPE / WIDE LAYOUT
+   Ativa quando largura > altura (celular/tablet deitado)
+═══════════════════════════════════════════════════════ */
+
+@media (orientation: landscape) and (max-height: 600px) {
+
+  .app { max-width: 100%; flex-direction: column; }
+
+  /* Header compacto */
+  .header-top { padding: 4px 10px 2px; }
+  .scoreboard { padding: 4px 10px; }
+  .score { font-size: 28px; }
+  .clock { font-size: 22px; }
+  .quarter-label { font-size: 9px; }
+  .clock-btns button { font-size: 10px; padding: 2px 6px; }
+  .nav-btn { padding: 6px 0; font-size: 11px; }
+  .team-name { font-size: 10px; }
+  .team-score { min-width: 70px; padding: 3px 6px; }
+
+  /* Scout em duas colunas */
+  .scout-view { flex-direction: row; flex-wrap: wrap; overflow-y: auto; }
+
+  .team-tabs { width: 100%; }
+
+  /* Coluna esquerda: atletas + mini stats */
+  .players-section {
+    width: 160px;
+    flex-shrink: 0;
+    border-bottom: none;
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    max-height: calc(100vh - 120px);
+  }
+  .players-grid { grid-template-columns: repeat(2, 1fr); gap: 4px; padding: 0 6px 8px; }
+  .player-btn { padding: 6px 2px; }
+  .pnum { font-size: 13px; }
+  .pname { font-size: 10px; }
+  .ppts { font-size: 10px; }
+
+  /* Coluna central: mapa */
+  .court-section {
+    flex: 1;
+    min-width: 0;
+    border-bottom: none;
+    border-right: 1px solid var(--border);
+  }
+  .court-section-header { padding: 4px 8px; }
+  .court-container { padding: 4px 8px; }
+  .shot-summary { padding: 4px 8px; flex-wrap: wrap; gap: 6px; }
+
+  /* Coluna direita: ações */
+  .actions-section {
+    width: 200px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    max-height: calc(100vh - 120px);
+    padding: 4px 0 8px;
+  }
+  .actions-group-label { padding: 4px 10px 3px; font-size: 10px; }
+  .actions-row { gap: 4px; padding: 0 6px; }
+  .action-btn { font-size: 13px; padding: 10px 4px; min-width: 0; }
+  .actions-group { margin-bottom: 4px; }
+
+  /* Selected bar compacta */
+  .selected-bar { padding: 5px 10px; }
+  .sel-badge { font-size: 13px; }
+  .mini-stat b { font-size: 13px; }
+  .mini-stat { font-size: 10px; }
+
+  /* Stats em landscape: duas tabelas lado a lado */
+  .stats-view { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
+  .stats-block { flex: 1; min-width: 300px; }
+  .stats-header { padding: 8px 12px 6px; font-size: 13px; }
+  .stats-total-score { font-size: 18px; }
+  .stats-table { font-size: 11px; min-width: 300px; }
+  .stats-table th { font-size: 9px; padding: 4px; }
+  .stats-table td { padding: 5px 4px; }
+
+  /* Log em landscape */
+  .log-entry { padding: 6px 12px; }
+  .log-player { font-size: 13px; }
+  .log-action { font-size: 12px; }
+
+  /* Home em landscape */
+  .home-screen { padding: 16px; flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 16px; }
+  .home-logo { flex-direction: row; align-items: center; gap: 12px; margin-top: 0; width: 100%; }
+  .home-title { font-size: 22px; }
+  .home-sub { font-size: 11px; }
+  .btn-new-game { max-width: 200px; padding: 12px; font-size: 16px; }
+  .recent-games { flex: 1; min-width: 280px; }
+  .game-card { padding: 8px 10px; }
+  .game-card-teams { font-size: 13px; }
+  .game-card-score { font-size: 16px; }
+}
+
+/* Tablet landscape (tela maior deitada) */
+@media (orientation: landscape) and (min-height: 600px) {
+
+  .app { max-width: 100%; }
+
+  .scoreboard { padding: 8px 20px; }
+  .score { font-size: 36px; }
+
+  /* Scout em 3 colunas com mais espaço */
+  .scout-view { flex-direction: row; flex-wrap: wrap; }
+  .team-tabs { width: 100%; }
+
+  .players-section {
+    width: 200px;
+    flex-shrink: 0;
+    border-bottom: none;
+    border-right: 1px solid var(--border);
+  }
+  .players-grid { grid-template-columns: repeat(3, 1fr); }
+
+  .court-section {
+    flex: 1;
+    border-bottom: none;
+    border-right: 1px solid var(--border);
+  }
+
+  .actions-section {
+    width: 220px;
+    flex-shrink: 0;
+    padding: 4px 0 12px;
+  }
+  .action-btn { font-size: 15px; padding: 13px 6px; }
+
+  /* Stats em duas colunas */
+  .stats-view { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
+  .stats-block { flex: 1; min-width: 400px; }
+}
+
+/* Shot hint e summary ajustes */
+.shot-hint {
+  padding: 4px 10px 5px;
+  font-size: 11px;
+  color: var(--green);
+  font-style: italic;
+}
+
+.court-section {
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.court-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px 0;
+}
+
+.shot-mode-btn {
+  background: var(--bg3);
+  border: 1.5px solid var(--border);
+  color: var(--muted);
+  font-family: var(--fd);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 7px 12px;
+  border-radius: var(--r);
+  cursor: pointer;
+  white-space: nowrap;
+  margin-top: 6px;
+}
+.shot-mode-btn:disabled { opacity: .35; cursor: not-allowed; }
+.shot-mode-btn.active { background: rgba(34,197,94,.12); border-color: var(--green); color: var(--green); }
+
+.court-container { padding: 8px 10px; }
+
+.court-svg { width: 100%; border-radius: var(--r); border: 1px solid var(--border); display: block; }
+
+.shot-summary {
+  display: flex;
+  gap: 12px;
+  padding: 4px 14px 8px;
+  font-family: var(--fd);
+  font-size: 13px;
+  font-weight: 600;
+}
+.shot-sum-item.made   { color: var(--green); }
+.shot-sum-item.missed { color: var(--red); }
+.shot-sum-item.pct    { color: var(--accent); }
+.shot-sum-item.three  { color: var(--blue); }
+
+.export-btns { display: flex; gap: 4px; }
+.export-btn.green, .export-btn-sm.green { color: var(--blue); border-color: rgba(59,130,246,.3); }
+
+/* ═══════════════════════════════════════════════════════
+   ASSIST FLOW
+═══════════════════════════════════════════════════════ */
+
+.assist-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.75);
+  display: flex; align-items: flex-end;
+  z-index: 180;
+}
+
+.assist-modal {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 16px 16px 0 0;
+  width: 100%; max-height: 80vh;
+  display: flex; flex-direction: column;
+}
+
+.assist-modal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 18px 10px;
+  font-family: var(--fd); font-size: 16px; font-weight: 700;
+  color: var(--acc2);
+  border-bottom: 1px solid var(--border);
+}
+
+.assist-modal-body { padding: 12px; overflow-y: auto; }
+
+.assist-label {
+  font-family: var(--fd); font-size: 12px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase;
+  color: var(--muted); padding: 0 4px 10px;
+}
+
+.assist-players-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.assist-player-btn {
+  background: var(--bg3);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 10px 4px; gap: 3px; cursor: pointer;
+  transition: all .12s;
+}
+.assist-player-btn:active {
+  background: rgba(168,85,247,.15);
+  border-color: #a855f7;
+}
+
+.assist-pnum {
+  font-family: var(--fd); font-size: 18px; font-weight: 800;
+  color: var(--text);
+}
+.assist-pname {
+  font-size: 11px; color: var(--muted); font-weight: 500;
+}
+
+/* Barra hint no pick_spot */
+.assist-hint-bar {
+  position: sticky; top: 0; z-index: 90;
+  background: rgba(168,85,247,.15);
+  border-bottom: 2px solid #a855f7;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px;
+  font-size: 13px; color: var(--text);
+}
+.assist-hint-bar b { color: #c084fc; }
+.assist-hint-icon {
+  font-size: 18px; color: #a855f7; flex-shrink: 0;
+}
+.assist-cancel-btn {
+  margin-left: auto; flex-shrink: 0;
+  background: transparent; border: 1px solid rgba(239,68,68,.4);
+  color: var(--red); font-family: var(--fd); font-size: 12px;
+  font-weight: 700; padding: 5px 10px; border-radius: 5px; cursor: pointer;
+}

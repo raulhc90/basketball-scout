@@ -1,439 +1,717 @@
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800&family=Barlow:wght@400;500;600&display=swap');
+import { useState, useEffect, useCallback, useRef } from 'react';
+import './App.css';
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+const QUARTERS = ['1Q', '2Q', '3Q', '4Q', 'OT'];
+const STORAGE_KEY = 'bball_scout_games';
 
-:root {
-  --bg:     #0a0c10;
-  --bg2:    #12151c;
-  --bg3:    #1a1f2a;
-  --bg4:    #222838;
-  --border: #2a3040;
-  --text:   #e2e8f0;
-  --muted:  #8899aa;
-  --accent: #f97316;
-  --acc2:   #fb923c;
-  --green:  #22c55e;
-  --blue:   #3b82f6;
-  --red:    #ef4444;
-  --yellow: #f59e0b;
-  --r:      8px;
-  --fd:     'Barlow Condensed', sans-serif;
-  --fb:     'Barlow', sans-serif;
+const INITIAL_PLAYER = () => ({
+  pts: 0, ast: 0, reb: 0, oreb: 0, stl: 0, blk: 0, to: 0,
+  fg2a: 0, fg2m: 0, fg3a: 0, fg3m: 0, fta: 0, ftm: 0, fouls: 0,
+  shots: [],
+});
+
+const DEFAULT_TEAM_A = [
+  {number:'04',name:'A. Silva'},{number:'07',name:'B. Costa'},{number:'10',name:'C. Lima'},
+  {number:'11',name:'D. Rocha'},{number:'23',name:'E. Mendes'},{number:'06',name:'F. Santos'},
+  {number:'08',name:'G. Alves'},{number:'09',name:'H. Nunes'},{number:'12',name:'I. Pires'},
+  {number:'14',name:'J. Ferreira'},{number:'15',name:'K. Braga'},{number:'21',name:'L. Moura'},
+];
+const DEFAULT_TEAM_B = [
+  {number:'05',name:'M. Ribeiro'},{number:'08',name:'N. Cardoso'},{number:'13',name:'O. Dias'},
+  {number:'17',name:'P. Carvalho'},{number:'22',name:'Q. Monteiro'},{number:'03',name:'R. Teixeira'},
+  {number:'06',name:'S. Figueira'},{number:'09',name:'T. Brito'},{number:'16',name:'U. Correia'},
+  {number:'18',name:'V. Barbosa'},{number:'20',name:'W. Cunha'},{number:'25',name:'X. Lopes'},
+];
+
+const mkTeam = (name, roster) => ({
+  name, score: 0,
+  players: roster.map((p, i) => ({ id: i+1, ...p, active: i < 5, ...INITIAL_PLAYER() }))
+});
+
+const newGame = (nameA='Time A', nameB='Time B', rosterA=DEFAULT_TEAM_A, rosterB=DEFAULT_TEAM_B) => ({
+  id: Date.now(),
+  date: new Date().toLocaleDateString('pt-BR'),
+  dateFull: new Date().toISOString(),
+  teams: [mkTeam(nameA, rosterA), mkTeam(nameB, rosterB)],
+  quarter: 0, clock: 600, log: [], finished: false,
+});
+
+const ACTIONS = [
+  { id:'fg2m',    label:'2pts',     pts:2, color:'#22c55e', group:'shoot' },
+  { id:'fg2miss', label:'2x falha', pts:0, color:'#475569', group:'shoot' },
+  { id:'fg3m',    label:'3pts',     pts:3, color:'#3b82f6', group:'shoot' },
+  { id:'fg3miss', label:'3x falha', pts:0, color:'#475569', group:'shoot' },
+  { id:'ftm',     label:'LL certo', pts:1, color:'#f59e0b', group:'ft'    },
+  { id:'ftmiss',  label:'LL erro',  pts:0, color:'#475569', group:'ft'    },
+  { id:'ast',     label:'Assist.',  pts:0, color:'#a855f7', group:'misc'  },
+  { id:'reb',     label:'Rebote',   pts:0, color:'#06b6d4', group:'misc'  },
+  { id:'oreb',    label:'Reb.Of.',  pts:0, color:'#0891b2', group:'misc'  },
+  { id:'stl',     label:'Roubo',    pts:0, color:'#10b981', group:'misc'  },
+  { id:'blk',     label:'Toco',     pts:0, color:'#8b5cf6', group:'misc'  },
+  { id:'to',      label:'Turnov.',  pts:0, color:'#ef4444', group:'misc'  },
+  { id:'fouls',   label:'Falta',    pts:0, color:'#f97316', group:'misc'  },
+];
+
+// Quadra NBA: 28.65m x 15.24m → viewBox 600x320
+// Origem (0,0) = canto inferior esquerdo da quadra
+// SVG y invertido: y_svg = 320 - y_real
+// Cesta esquerda: x=155cm=~32px, Cesta direita: x=2710cm=~568px
+// Linha de 3pts: raio 723cm do aro, linha lateral a 91cm do aro
+// Garrafão: 490x580cm
+
+const fmtTime = s => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+const pct = (m,a) => a===0 ? '—' : `${Math.round(m/a*100)}%`;
+
+const totals = team => team.players.reduce((acc, p) => {
+  ['pts','ast','reb','oreb','stl','blk','to','fg2m','fg2a','fg3m','fg3a','ftm','fta','fouls']
+    .forEach(k => acc[k] = (acc[k]||0) + p[k]);
+  return acc;
+}, {});
+
+function loadGames() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+  catch { return []; }
+}
+function saveGames(games) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(games)); } catch {}
 }
 
-html, body, #root { height: 100%; background: var(--bg); }
-
-.app {
-  min-height: 100vh;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--fb);
-  display: flex;
-  flex-direction: column;
-  max-width: 600px;
-  margin: 0 auto;
+// ─── CSV Exports ──────────────────────────────────────────────────────────────
+function exportStatsCSV(game) {
+  const lines = ['Atleta,Time,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG3M,FG3A,FTM,FTA,FG%,3P%,LL%,FALTAS'];
+  game.teams.forEach(team => {
+    team.players.forEach(p => {
+      lines.push(`"#${p.number} ${p.name}","${team.name}",${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${p.fg3m},${p.fg3a},${p.ftm},${p.fta},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${pct(p.fg3m,p.fg3a)},${pct(p.ftm,p.fta)},${p.fouls}`);
+    });
+    const tot = totals(team);
+    lines.push(`"TOTAL","${team.name}",${tot.pts},${tot.ast},${tot.reb},${tot.oreb},${tot.stl},${tot.blk},${tot.to},${tot.fg2m},${tot.fg2a},${tot.fg3m},${tot.fg3a},${tot.ftm},${tot.fta},${pct(tot.fg2m+tot.fg3m,tot.fg2a+tot.fg3a)},${pct(tot.fg3m,tot.fg3a)},${pct(tot.ftm,tot.fta)},${tot.fouls}`);
+  });
+  download(lines.join('\n'), `stats_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
 
-/* TOAST */
-.toast {
-  position: fixed; top: 80px; left: 50%;
-  transform: translateX(-50%);
-  background: var(--accent); color: #fff;
-  font-family: var(--fd); font-size: 18px; font-weight: 700;
-  padding: 10px 24px; border-radius: 40px; z-index: 200;
-  animation: fadeToast 1.6s ease forwards; white-space: nowrap; pointer-events: none;
-}
-@keyframes fadeToast {
-  0%  { opacity:0; transform:translateX(-50%) translateY(-8px); }
-  15% { opacity:1; transform:translateX(-50%) translateY(0); }
-  75% { opacity:1; }
-  100%{ opacity:0; }
+function exportShotsCSV(game) {
+  const lines = ['Atleta,Time,Quarto,Tempo,X_pct,Y_pct,Convertido,Tipo,Zona'];
+  game.teams.forEach(team => {
+    team.players.forEach(p => {
+      (p.shots||[]).forEach(s => {
+        lines.push(`"#${p.number} ${p.name}","${team.name}","${s.q||''}","${s.time||''}",${s.x.toFixed(2)},${s.y.toFixed(2)},${s.made?'Sim':'Não'},${s.three?'3pts':'2pts'},"${s.zone||''}"`);
+      });
+    });
+  });
+  download(lines.join('\n'), `arremessos_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
 
-/* HOME */
-.home-screen { display:flex; flex-direction:column; align-items:center; padding:32px 16px; gap:24px; min-height:100vh; }
-.home-logo { display:flex; flex-direction:column; align-items:center; gap:10px; margin-top:16px; }
-.logo-ball { filter: drop-shadow(0 0 20px rgba(249,115,22,.4)); }
-.home-title { font-family:var(--fd); font-size:32px; font-weight:800; letter-spacing:.04em; color:var(--text); }
-.home-sub { font-size:13px; color:var(--muted); letter-spacing:.04em; }
-.btn-new-game {
-  width:100%; max-width:360px;
-  background: var(--accent); color:#fff;
-  font-family:var(--fd); font-size:20px; font-weight:700; letter-spacing:.06em;
-  border:none; border-radius:var(--r); padding:18px;
-  cursor:pointer; transition:background .15s;
-}
-.btn-new-game:active { background:#c2530a; }
-
-.recent-games { width:100%; max-width:500px; display:flex; flex-direction:column; gap:8px; }
-.recent-label { font-family:var(--fd); font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); padding:0 4px 4px; }
-.game-card {
-  background:var(--bg2); border:1px solid var(--border);
-  border-radius:var(--r); padding:12px 14px;
-  cursor:pointer; transition:border-color .15s;
-}
-.game-card:active { border-color:var(--accent); }
-.game-card-teams { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; font-family:var(--fd); font-size:16px; font-weight:700; }
-.game-card-score { font-size:22px; font-weight:800; color:var(--accent); }
-.game-card-meta { display:flex; align-items:center; gap:12px; font-size:12px; color:var(--muted); }
-.export-btn {
-  margin-left:auto;
-  background:var(--bg4); border:1px solid var(--border);
-  color:var(--green); font-family:var(--fd); font-size:12px; font-weight:700;
-  padding:4px 10px; border-radius:5px; cursor:pointer;
+function download(content, filename) {
+  const blob = new Blob(['\ufeff'+content], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
 }
 
-/* MODAL */
-.modal-overlay {
-  position:fixed; inset:0; background:rgba(0,0,0,.75);
-  display:flex; align-items:flex-end; z-index:150;
+// ─── Basketball Court SVG ─────────────────────────────────────────────────────
+// viewBox 0 0 600 320, orientação horizontal, ataque para direita
+// Medidas baseadas na NBA/NBB: quadra 28m x 15m
+// Escala: 600/2865 = 0.2094 px/cm | 320/1524 = 0.2100 px/cm ≈ 1px = 4.77cm
+// Cesta: x=160(esq) e x=440(dir), y=160 (centro)
+// Garrafão: 580x490cm → 122x103px
+// Linha 3pts: raio 675cm → 141px, linha lateral a 65cm → 14px
+// Linha central: x=300
+
+function BasketballCourt({ shots=[], onCourtClick, shotMode=false, filterTeam=null }) {
+  // Dimensões SVG
+  const W = 600, H = 320;
+  const cx1 = 57,  cy = 160; // cesta esquerda
+  const cx2 = 543; // cesta direita
+
+  // Garrafão esq: x0=0..122, y: cy±51
+  const paint1 = { x:0, y:cy-51, w:122, h:103 };
+  // Garrafão dir
+  const paint2 = { x:W-122, y:cy-51, w:122, h:103 };
+
+  // Zona de cor por tipo
+  const getColor = (shot) => shot.made
+    ? 'rgba(34,197,94,0.85)'
+    : 'rgba(239,68,68,0.85)';
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="court-svg"
+      style={{cursor: shotMode ? 'crosshair' : 'default'}}
+      onClick={onCourtClick}
+    >
+      {/* Fundo da quadra */}
+      <rect x="0" y="0" width={W} height={H} fill="#1a1f2a"/>
+
+      {/* Linhas da quadra - cor sutil */}
+      <g stroke="#3a4560" strokeWidth="1.2" fill="none">
+        {/* Borda da quadra */}
+        <rect x="2" y="2" width={W-4} height={H-4} rx="2"/>
+
+        {/* Linha central */}
+        <line x1={W/2} y1="2" x2={W/2} y2={H-2}/>
+        {/* Círculo central - raio 180cm → 38px */}
+        <circle cx={W/2} cy={cy} r="38"/>
+
+        {/* Garrafão esquerdo */}
+        <rect x={paint1.x+2} y={paint1.y} width={paint1.w} height={paint1.h}/>
+        {/* Linha de lance livre esq */}
+        <line x1={paint1.x+paint1.w} y1={paint1.y} x2={paint1.x+paint1.w} y2={paint1.y+paint1.h}/>
+        {/* Semicírculo lance livre esq (acima da linha) */}
+        <path d={`M ${paint1.x+paint1.w} ${cy-51} A 51 51 0 0 1 ${paint1.x+paint1.w} ${cy+51}`} strokeDasharray="4 3"/>
+
+        {/* Garrafão direito */}
+        <rect x={paint2.x} y={paint2.y} width={paint2.w-2} height={paint2.h}/>
+        {/* Linha de lance livre dir */}
+        <line x1={paint2.x} y1={paint2.y} x2={paint2.x} y2={paint2.y+paint2.h}/>
+        {/* Semicírculo lance livre dir */}
+        <path d={`M ${paint2.x} ${cy-51} A 51 51 0 0 0 ${paint2.x} ${cy+51}`} strokeDasharray="4 3"/>
+
+        {/* Linha de 3pts esquerda:
+            NBB: raio 675cm do aro, reta lateral a 90cm do aro
+            90cm → 19px; 675cm → 141px
+            Linha reta lateral: x=cx1..cx1+38, y=cy±75
+            Arco: de y=cy-75 até y=cy+75 */}
+        {/* Retas laterais esq */}
+        <line x1="2" y1={cy-75} x2={cx1+38} y2={cy-75}/>
+        <line x1="2" y1={cy+75} x2={cx1+38} y2={cy+75}/>
+        {/* Arco 3pts esq */}
+        <path d={`M ${cx1+38} ${cy-75} A 141 141 0 0 1 ${cx1+38} ${cy+75}`}/>
+
+        {/* Linha de 3pts direita */}
+        <line x1={W-2} y1={cy-75} x2={cx2-38} y2={cy-75}/>
+        <line x1={W-2} y1={cy+75} x2={cx2-38} y2={cy+75}/>
+        <path d={`M ${cx2-38} ${cy-75} A 141 141 0 0 0 ${cx2-38} ${cy+75}`}/>
+
+        {/* Área restrita esq (raio 125cm → 26px) */}
+        <path d={`M ${cx1} ${cy-26} A 26 26 0 0 1 ${cx1} ${cy+26}`}/>
+        {/* Área restrita dir */}
+        <path d={`M ${cx2} ${cy-26} A 26 26 0 0 0 ${cx2} ${cy+26}`}/>
+      </g>
+
+      {/* Cestas */}
+      <g stroke="#f97316" strokeWidth="1.5" fill="none">
+        <circle cx={cx1} cy={cy} r="5"/>
+        <line x1="2" y1={cy} x2={cx1-5} y2={cy}/>
+        <circle cx={cx2} cy={cy} r="5"/>
+        <line x1={W-2} y1={cy} x2={cx2+5} y2={cy}/>
+      </g>
+
+      {/* Rótulos das zonas (muito discretos) */}
+      <g fill="#3a4560" fontSize="9" fontFamily="sans-serif" textAnchor="middle">
+        <text x="60"  y="30">3pts</text>
+        <text x="300" y="18">3pts topo</text>
+        <text x="540" y="30">3pts</text>
+        <text x="61"  y={cy+4}>Garrafão</text>
+        <text x="539" y={cy+4}>Garrafão</text>
+      </g>
+
+      {/* Shots */}
+      {shots.map((s, i) => {
+        // x,y vêm em % do SVG
+        const px = s.x * W / 100;
+        const py = s.y * H / 100;
+        return s.made ? (
+          <circle key={i} cx={px} cy={py} r="5" fill={getColor(s)} stroke="#fff" strokeWidth="0.5" opacity="0.9"/>
+        ) : (
+          <g key={i} opacity="0.9">
+            <line x1={px-4} y1={py-4} x2={px+4} y2={py+4} stroke={getColor(s)} strokeWidth="1.5" strokeLinecap="round"/>
+            <line x1={px+4} y1={py-4} x2={px-4} y2={py+4} stroke={getColor(s)} strokeWidth="1.5" strokeLinecap="round"/>
+          </g>
+        );
+      })}
+    </svg>
+  );
 }
-.modal {
-  background:var(--bg2); border:1px solid var(--border);
-  border-radius:16px 16px 0 0; width:100%; max-height:92vh;
-  display:flex; flex-direction:column;
-}
-.modal-header {
-  display:flex; justify-content:space-between; align-items:center;
-  padding:16px 18px 12px;
-  font-family:var(--fd); font-size:18px; font-weight:700;
-  border-bottom:1px solid var(--border);
-}
-.modal-close {
-  background:var(--bg4); border:none; color:var(--muted);
-  width:30px; height:30px; border-radius:50%; font-size:14px; cursor:pointer;
-}
-.modal-body { overflow-y:auto; padding:16px 12px; flex:1; }
-.modal-teams { display:flex; gap:10px; }
-.modal-team-col { flex:1; display:flex; flex-direction:column; gap:6px; }
-.team-name-input, .num-input, .name-inp {
-  background:var(--bg3); border:1px solid var(--border);
-  color:var(--text); border-radius:6px; padding:8px 10px;
-  font-family:var(--fb); font-size:14px; width:100%; outline:none;
-}
-.team-name-input { font-family:var(--fd); font-size:16px; font-weight:700; margin-bottom:4px; }
-.team-name-input:focus, .num-input:focus, .name-inp:focus { border-color:var(--accent); }
-.modal-roster-header { display:flex; gap:6px; font-family:var(--fd); font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); padding:0 2px; }
-.modal-roster { display:flex; flex-direction:column; gap:4px; }
-.modal-player-row { display:flex; gap:5px; }
-.num-input { width:44px; flex-shrink:0; text-align:center; padding:6px 4px; }
-.name-inp { flex:1; padding:6px 8px; font-size:13px; }
-.modal-footer { padding:12px 16px 24px; border-top:1px solid var(--border); }
-.btn-start {
-  width:100%; background:var(--accent); color:#fff;
-  font-family:var(--fd); font-size:20px; font-weight:700;
-  border:none; border-radius:var(--r); padding:16px; cursor:pointer;
-}
 
-/* HEADER */
-.header { background:var(--bg2); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:50; }
-.header-top { display:flex; align-items:center; justify-content:space-between; padding:8px 12px 4px; }
-.back-btn { background:none; border:none; color:var(--muted); font-size:18px; cursor:pointer; padding:4px 8px; }
-.back-btn:active { color:var(--accent); }
-.header-game-label { font-family:var(--fd); font-size:13px; font-weight:600; color:var(--muted); letter-spacing:.04em; flex:1; text-align:center; }
-.export-btn-sm {
-  background:transparent; border:1px solid var(--border);
-  color:var(--green); font-family:var(--fd); font-size:12px; font-weight:700;
-  padding:4px 10px; border-radius:5px; cursor:pointer;
-}
+// ─── Detecta se arremesso é de 3pts baseado na posição na quadra ──────────────
+function isThreePointer(xPct, yPct) {
+  const W = 600, H = 320;
+  const px = xPct * W / 100;
+  const py = yPct * H / 100;
+  const cy = 160;
 
-.scoreboard { display:flex; align-items:center; justify-content:space-between; padding:6px 12px 6px; gap:6px; }
-.team-score { display:flex; flex-direction:column; align-items:flex-start; gap:2px; cursor:pointer; padding:5px 8px; border-radius:var(--r); border:1.5px solid transparent; transition:all .15s; min-width:85px; }
-.team-score.right { align-items:flex-end; }
-.team-score[data-active=true] { border-color:var(--accent); background:rgba(249,115,22,.08); }
-.team-name { font-family:var(--fd); font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
-.team-score[data-active=true] .team-name { color:var(--acc2); }
-.score { font-family:var(--fd); font-size:40px; font-weight:800; line-height:1; letter-spacing:-.02em; }
+  // Cesta mais próxima
+  const distLeft  = Math.sqrt((px-57)**2  + (py-cy)**2);
+  const distRight = Math.sqrt((px-543)**2 + (py-cy)**2);
 
-.center-info { display:flex; flex-direction:column; align-items:center; gap:2px; flex:1; }
-.quarter-label { font-family:var(--fd); font-size:10px; font-weight:700; letter-spacing:.15em; color:var(--accent); text-transform:uppercase; }
-.clock { font-family:var(--fd); font-size:30px; font-weight:700; letter-spacing:.04em; line-height:1; }
-.clock-btns { display:flex; gap:4px; }
-.clock-btns button { background:var(--bg4); border:1px solid var(--border); color:var(--text); border-radius:5px; font-size:11px; padding:3px 7px; cursor:pointer; font-family:var(--fd); font-weight:600; }
-.clock-btns button:active { background:var(--accent); border-color:var(--accent); }
-
-.nav { display:flex; border-top:1px solid var(--border); }
-.nav-btn { flex:1; background:none; border:none; color:var(--muted); font-family:var(--fd); font-size:13px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; padding:8px 0; cursor:pointer; border-bottom:2px solid transparent; transition:all .15s; }
-.nav-btn[data-active=true] { color:var(--accent); border-bottom-color:var(--accent); }
-
-/* SCOUT */
-.scout-view { display:flex; flex-direction:column; flex:1; }
-.team-tabs { display:flex; background:var(--bg2); border-bottom:1px solid var(--border); }
-.team-tab { flex:1; background:none; border:none; color:var(--muted); font-family:var(--fd); font-size:14px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; padding:10px; cursor:pointer; border-bottom:3px solid transparent; transition:all .15s; }
-.team-tab[data-active=true] { color:var(--accent); border-bottom-color:var(--accent); background:rgba(249,115,22,.05); }
-.tab-score { font-size:18px; margin-left:6px; }
-
-.section-label { font-family:var(--fd); font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); padding:10px 14px 6px; }
-.players-section { background:var(--bg2); border-bottom:1px solid var(--border); }
-.players-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; padding:0 10px 10px; }
-.player-btn { background:var(--bg3); border:1.5px solid var(--border); border-radius:var(--r); display:flex; flex-direction:column; align-items:center; padding:8px 4px; gap:2px; cursor:pointer; transition:all .12s; }
-.player-btn[data-active=true] { background:rgba(249,115,22,.12); border-color:var(--accent); }
-.player-btn[data-bench=true] { opacity:.45; }
-.pnum { font-family:var(--fd); font-size:16px; font-weight:800; color:var(--text); }
-.player-btn[data-active=true] .pnum { color:var(--accent); }
-.pname { font-size:11px; color:var(--muted); font-weight:500; text-align:center; }
-.ppts { font-family:var(--fd); font-size:12px; font-weight:700; color:var(--green); }
-
-.selected-bar { background:rgba(249,115,22,.07); border-bottom:1px solid rgba(249,115,22,.2); padding:8px 14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
-.sel-badge { font-family:var(--fd); font-size:15px; font-weight:700; color:var(--acc2); white-space:nowrap; }
-.sel-mini-stats { display:flex; gap:10px; flex-wrap:wrap; }
-.mini-stat { font-family:var(--fd); font-size:11px; color:var(--muted); display:flex; flex-direction:column; align-items:center; line-height:1.1; gap:1px; }
-.mini-stat b { font-size:16px; font-weight:800; color:var(--text); }
-.mini-stat[data-warn=true] b { color:var(--yellow); }
-.mini-stat[data-danger=true] b { color:var(--red); }
-
-.actions-section { padding:4px 0 16px; }
-.actions-group { margin-bottom:6px; }
-.actions-group-label { font-family:var(--fd); font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); padding:6px 14px 5px; }
-.actions-row { display:flex; gap:6px; padding:0 10px; }
-.actions-row.wrap { flex-wrap:wrap; }
-.action-btn { flex:1; min-width:70px; background:var(--bg3); border:1.5px solid var(--bg4); border-radius:var(--r); color:var(--ac,var(--text)); font-family:var(--fd); font-size:16px; font-weight:700; padding:15px 6px; cursor:pointer; transition:all .1s; border-left:3px solid var(--ac,var(--border)); text-align:center; line-height:1; }
-.action-btn:active { background:color-mix(in srgb,var(--ac) 18%,var(--bg3)); transform:scale(.97); }
-
-/* STATS */
-.stats-view { display:flex; flex-direction:column; flex:1; }
-.stats-block { border-bottom:1px solid var(--border); padding-bottom:12px; }
-.stats-header { display:flex; justify-content:space-between; align-items:center; padding:14px 16px 10px; font-family:var(--fd); font-size:16px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; }
-.stats-total-score { font-size:22px; font-weight:800; color:var(--accent); }
-.empty-stats { padding:16px; color:var(--muted); font-size:14px; text-align:center; }
-.table-wrap { overflow-x:auto; padding:0 10px; }
-.stats-table { width:100%; border-collapse:collapse; font-size:13px; min-width:540px; }
-.stats-table th { font-family:var(--fd); font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); text-align:center; padding:6px; border-bottom:1px solid var(--border); }
-.stats-table th:first-child { text-align:left; }
-.stats-table td { text-align:center; padding:8px 6px; border-bottom:1px solid rgba(42,48,64,.5); color:var(--text); font-weight:500; }
-.stats-table td:first-child { text-align:left; }
-.stats-table tfoot td { font-family:var(--fd); font-weight:800; font-size:14px; color:var(--acc2); border-top:1px solid var(--border); border-bottom:none; }
-.player-cell { display:flex; align-items:center; gap:6px; white-space:nowrap; }
-.num-badge { font-family:var(--fd); font-size:12px; font-weight:700; background:var(--bg4); color:var(--muted); padding:2px 5px; border-radius:4px; flex-shrink:0; }
-.pts-cell { font-weight:700; color:var(--green); }
-td[data-warn=true] { color:var(--yellow); font-weight:700; }
-
-/* SHOT MAP */
-.map-view { display:flex; flex-direction:column; flex:1; }
-.map-controls { background:var(--bg2); border-bottom:1px solid var(--border); }
-.map-player-row { display:flex; gap:8px; padding:8px 10px; }
-.map-player-select { flex:1; background:var(--bg3); border:1px solid var(--border); color:var(--text); border-radius:var(--r); padding:9px 10px; font-family:var(--fb); font-size:14px; outline:none; }
-.shot-mode-btn { background:var(--bg3); border:1.5px solid var(--border); color:var(--muted); font-family:var(--fd); font-size:14px; font-weight:700; padding:9px 12px; border-radius:var(--r); cursor:pointer; white-space:nowrap; }
-.shot-mode-btn:disabled { opacity:.35; cursor:not-allowed; }
-.shot-mode-btn.active { background:rgba(34,197,94,.12); border-color:var(--green); color:var(--green); }
-.shot-hint { padding:6px 14px 8px; font-size:12px; color:var(--green); font-style:italic; }
-.court-container { padding:12px; }
-.shot-map-wrap { position:relative; }
-.court-svg { width:100%; border-radius:var(--r); border:1px solid var(--border); }
-.shot-legend { display:flex; gap:16px; justify-content:center; padding:8px 0 0; font-family:var(--fd); font-size:13px; font-weight:600; }
-.legend-item.made { color:var(--green); }
-.legend-item.missed { color:var(--red); }
-.legend-item.pct { color:var(--accent); }
-.map-team-summary { display:flex; border-top:1px solid var(--border); }
-.map-team-stat { flex:1; display:flex; flex-direction:column; gap:3px; padding:12px 14px; border-right:1px solid var(--border); font-family:var(--fd); font-size:13px; color:var(--muted); }
-.map-team-stat:last-child { border-right:none; }
-.map-team-name { font-size:15px; font-weight:700; color:var(--text); margin-bottom:2px; }
-
-/* LOG */
-.log-view { display:flex; flex-direction:column; flex:1; }
-.log-top { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; font-family:var(--fd); font-size:13px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); border-bottom:1px solid var(--border); }
-.clear-btn { background:rgba(239,68,68,.12); border:1px solid rgba(239,68,68,.3); color:var(--red); font-family:var(--fd); font-size:12px; font-weight:700; padding:5px 12px; border-radius:5px; cursor:pointer; }
-.empty-log { padding:40px 20px; text-align:center; color:var(--muted); font-size:14px; }
-.log-list { display:flex; flex-direction:column; }
-.log-entry { padding:10px 16px; border-bottom:1px solid var(--border); display:flex; flex-direction:column; gap:3px; }
-.log-meta { display:flex; gap:8px; align-items:center; font-size:11px; color:var(--muted); }
-.log-q { font-family:var(--fd); font-weight:700; background:var(--bg4); padding:1px 5px; border-radius:3px; font-size:10px; letter-spacing:.1em; color:var(--accent); }
-.log-team-name { font-weight:600; }
-.log-body { display:flex; align-items:center; gap:8px; }
-.log-player { font-family:var(--fd); font-size:15px; font-weight:700; color:var(--text); }
-.log-action { font-family:var(--fd); font-size:14px; font-weight:600; }
-.log-pts { margin-left:auto; font-family:var(--fd); font-size:16px; font-weight:800; color:var(--green); }
-
-::-webkit-scrollbar { width:4px; height:4px; }
-::-webkit-scrollbar-track { background:var(--bg2); }
-::-webkit-scrollbar-thumb { background:var(--bg4); border-radius:2px; }
-
-/* ═══════════════════════════════════════════════════════
-   LANDSCAPE / WIDE LAYOUT
-   Ativa quando largura > altura (celular/tablet deitado)
-═══════════════════════════════════════════════════════ */
-
-@media (orientation: landscape) and (max-height: 600px) {
-
-  .app { max-width: 100%; flex-direction: column; }
-
-  /* Header compacto */
-  .header-top { padding: 4px 10px 2px; }
-  .scoreboard { padding: 4px 10px; }
-  .score { font-size: 28px; }
-  .clock { font-size: 22px; }
-  .quarter-label { font-size: 9px; }
-  .clock-btns button { font-size: 10px; padding: 2px 6px; }
-  .nav-btn { padding: 6px 0; font-size: 11px; }
-  .team-name { font-size: 10px; }
-  .team-score { min-width: 70px; padding: 3px 6px; }
-
-  /* Scout em duas colunas */
-  .scout-view { flex-direction: row; flex-wrap: wrap; overflow-y: auto; }
-
-  .team-tabs { width: 100%; }
-
-  /* Coluna esquerda: atletas + mini stats */
-  .players-section {
-    width: 160px;
-    flex-shrink: 0;
-    border-bottom: none;
-    border-right: 1px solid var(--border);
-    overflow-y: auto;
-    max-height: calc(100vh - 120px);
+  if (distLeft < distRight) {
+    // Lado esquerdo: linha reta a y<85 ou y>235, arco raio>141
+    if (py < cy-75 || py > cy+75) return true; // acima/abaixo da reta lateral
+    if (px < 57+38) return false; // dentro do garrafão
+    return distLeft > 141;
+  } else {
+    if (py < cy-75 || py > cy+75) return true;
+    if (px > 543-38) return false;
+    return distRight > 141;
   }
-  .players-grid { grid-template-columns: repeat(2, 1fr); gap: 4px; padding: 0 6px 8px; }
-  .player-btn { padding: 6px 2px; }
-  .pnum { font-size: 13px; }
-  .pname { font-size: 10px; }
-  .ppts { font-size: 10px; }
+}
 
-  /* Coluna central: mapa */
-  .court-section {
-    flex: 1;
-    min-width: 0;
-    border-bottom: none;
-    border-right: 1px solid var(--border);
+// ─── New Game Modal ───────────────────────────────────────────────────────────
+function NewGameModal({ onStart, onClose }) {
+  const [nameA, setNameA] = useState('Time A');
+  const [nameB, setNameB] = useState('Time B');
+  const [players, setPlayers] = useState({
+    a: DEFAULT_TEAM_A.map(p => ({...p})),
+    b: DEFAULT_TEAM_B.map(p => ({...p})),
+  });
+
+  const updatePlayer = (team, idx, field, val) => {
+    setPlayers(prev => ({
+      ...prev,
+      [team]: prev[team].map((p,i) => i===idx ? {...p,[field]:val} : p)
+    }));
+  };
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal">
+        <div className="modal-header">
+          <span>Novo Jogo</span>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div className="modal-teams">
+            {[['a', nameA, setNameA], ['b', nameB, setNameB]].map(([key, name, setName]) => (
+              <div key={key} className="modal-team-col">
+                <input className="team-name-input" value={name} onChange={e => setName(e.target.value)} placeholder="Nome do time"/>
+                <div className="modal-roster-header"><span>#</span><span>Nome</span></div>
+                <div className="modal-roster">
+                  {players[key].map((p, i) => (
+                    <div key={i} className="modal-player-row">
+                      <input className="num-input" value={p.number} maxLength={2}
+                        onChange={e => updatePlayer(key, i, 'number', e.target.value)}/>
+                      <input className="name-inp" value={p.name}
+                        onChange={e => updatePlayer(key, i, 'name', e.target.value)}/>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn-start" onClick={() => onStart(nameA, nameB, players.a, players.b)}>
+            Iniciar Jogo
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main App ─────────────────────────────────────────────────────────────────
+export default function App() {
+  const [screen, setScreen]   = useState('home');
+  const [games, setGames]     = useState(loadGames);
+  const [game, setGame]       = useState(null);
+  const [running, setRunning] = useState(false);
+  const [activeTeam, setActiveTeam]         = useState(0);
+  const [selectedPlayer, setSelectedPlayer] = useState(null);
+  const [view, setView]       = useState('scout');
+  const [toast, setToast]     = useState(null);
+  const [showNewGame, setShowNewGame] = useState(false);
+  const [shotMode, setShotMode]       = useState(false);
+  const courtRef = useRef(null);
+
+  useEffect(() => {
+    if (!running || !game) return;
+    const id = setInterval(() => {
+      setGame(g => {
+        if (!g || g.clock <= 0) { setRunning(false); return g; }
+        return { ...g, clock: g.clock - 1 };
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [running, game]);
+
+  useEffect(() => {
+    if (!game) return;
+    setGames(prev => {
+      const idx = prev.findIndex(g => g.id === game.id);
+      const next = idx >= 0 ? prev.map((g,i) => i===idx ? game : g) : [game, ...prev];
+      saveGames(next);
+      return next;
+    });
+  }, [game]);
+
+  const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 1600); };
+
+  const startGame = (nameA, nameB, rosterA, rosterB) => {
+    const g = newGame(nameA, nameB, rosterA, rosterB);
+    setGame(g); setShowNewGame(false); setScreen('game');
+    setView('scout'); setActiveTeam(0); setSelectedPlayer(null);
+    setRunning(false); setShotMode(false);
+  };
+
+  const openGame = g => {
+    setGame(g); setScreen('game'); setView('scout');
+    setActiveTeam(0); setSelectedPlayer(null);
+    setRunning(false); setShotMode(false);
+  };
+
+  const applyAction = useCallback(action => {
+    if (selectedPlayer === null) { showToast('Selecione um atleta'); return; }
+    setGame(g => {
+      const teams = g.teams.map((t, ti) => {
+        if (ti !== activeTeam) return t;
+        const players = t.players.map((p, pi) => {
+          if (pi !== selectedPlayer) return p;
+          const n = { ...p };
+          if      (action.id==='fg2m')    { n.fg2m++; n.fg2a++; }
+          else if (action.id==='fg2miss') { n.fg2a++; }
+          else if (action.id==='fg3m')    { n.fg3m++; n.fg3a++; }
+          else if (action.id==='fg3miss') { n.fg3a++; }
+          else if (action.id==='ftm')     { n.ftm++;  n.fta++;  }
+          else if (action.id==='ftmiss')  { n.fta++;  }
+          else                            { n[action.id] = (n[action.id]||0)+1; }
+          n.pts = n.fg2m*2 + n.fg3m*3 + n.ftm;
+          return n;
+        });
+        return { ...t, score: t.score + action.pts, players };
+      });
+      const pl = g.teams[activeTeam].players[selectedPlayer];
+      const entry = {
+        id: Date.now(), q: QUARTERS[g.quarter], time: fmtTime(g.clock),
+        team: g.teams[activeTeam].name,
+        player: `#${pl.number} ${pl.name.split(' ')[0]}`,
+        action: action.label, pts: action.pts, color: action.color
+      };
+      return { ...g, teams, log: [entry, ...g.log] };
+    });
+    const p = game.teams[activeTeam].players[selectedPlayer];
+    if (action.pts > 0) showToast(`+${action.pts} — ${p.name.split(' ')[0]}`);
+  }, [selectedPlayer, activeTeam, game]);
+
+  // Click na quadra para registrar arremesso com posição
+  const handleCourtClick = useCallback(e => {
+    if (!shotMode || selectedPlayer === null || !courtRef.current) return;
+    const rect = courtRef.current.getBoundingClientRect();
+    const xPct = (e.clientX - rect.left) / rect.width * 100;
+    const yPct = (e.clientY - rect.top)  / rect.height * 100;
+    const three = isThreePointer(xPct, yPct);
+    const made = window.confirm(`Arremesso de ${three ? '3pts' : '2pts'} — Convertido?`);
+    const actionId = made ? (three ? 'fg3m' : 'fg2m') : (three ? 'fg3miss' : 'fg2miss');
+    const action = ACTIONS.find(a => a.id === actionId);
+
+    setGame(g => {
+      const teams = g.teams.map((t, ti) => {
+        if (ti !== activeTeam) return t;
+        const players = t.players.map((p, pi) => {
+          if (pi !== selectedPlayer) return p;
+          const n = { ...p };
+          if      (actionId==='fg2m')    { n.fg2m++; n.fg2a++; }
+          else if (actionId==='fg2miss') { n.fg2a++; }
+          else if (actionId==='fg3m')    { n.fg3m++; n.fg3a++; }
+          else if (actionId==='fg3miss') { n.fg3a++; }
+          n.pts = n.fg2m*2 + n.fg3m*3 + n.ftm;
+          n.shots = [...(n.shots||[]), {
+            x: xPct, y: yPct, made, three,
+            zone: three ? '3pts' : '2pts',
+            q: QUARTERS[g.quarter],
+            time: fmtTime(g.clock),
+          }];
+          return n;
+        });
+        return { ...t, score: t.score + (made ? (three?3:2) : 0), players };
+      });
+      const pl = g.teams[activeTeam].players[selectedPlayer];
+      const entry = {
+        id: Date.now(), q: QUARTERS[g.quarter], time: fmtTime(g.clock),
+        team: g.teams[activeTeam].name,
+        player: `#${pl.number} ${pl.name.split(' ')[0]}`,
+        action: action.label, pts: action.pts, color: action.color
+      };
+      return { ...g, teams, log: [entry, ...g.log] };
+    });
+    const p = game.teams[activeTeam].players[selectedPlayer];
+    if (made) showToast(`+${three?3:2} — ${p.name.split(' ')[0]}`);
+  }, [shotMode, selectedPlayer, activeTeam, game]);
+
+  // ── HOME ──────────────────────────────────────────────────────────────────
+  if (screen === 'home') {
+    return (
+      <div className="app">
+        {showNewGame && <NewGameModal onStart={startGame} onClose={() => setShowNewGame(false)}/>}
+        <div className="home-screen">
+          <div className="home-logo">
+            <div className="logo-ball">
+              <svg viewBox="0 0 60 60" width="60" height="60">
+                <circle cx="30" cy="30" r="28" fill="#f97316" stroke="#c2530a" strokeWidth="1"/>
+                <path d="M30 2 Q30 30 30 58" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
+                <path d="M2 30 Q30 30 58 30" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
+                <path d="M8 12 Q20 22 30 30 Q40 38 52 48" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
+                <path d="M52 12 Q40 22 30 30 Q20 38 8 48" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
+              </svg>
+            </div>
+            <div className="home-title">Basketball Scout</div>
+            <div className="home-sub">Análise ao vivo · Open Source · PWA</div>
+          </div>
+          <button className="btn-new-game" onClick={() => setShowNewGame(true)}>+ Novo Jogo</button>
+          {games.length > 0 && (
+            <div className="recent-games">
+              <div className="recent-label">Jogos Salvos</div>
+              {games.slice(0,8).map(g => (
+                <div key={g.id} className="game-card" onClick={() => openGame(g)}>
+                  <div className="game-card-teams">
+                    <span>{g.teams[0].name}</span>
+                    <span className="game-card-score">{g.teams[0].score} — {g.teams[1].score}</span>
+                    <span>{g.teams[1].name}</span>
+                  </div>
+                  <div className="game-card-meta">
+                    <span>{g.date}</span>
+                    <span>{QUARTERS[g.quarter]}</span>
+                    <span>{g.log.length} eventos</span>
+                    <div className="export-btns" onClick={e => e.stopPropagation()}>
+                      <button className="export-btn" onClick={() => exportStatsCSV(g)}>Stats</button>
+                      <button className="export-btn green" onClick={() => exportShotsCSV(g)}>Arrem.</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
   }
-  .court-section-header { padding: 4px 8px; }
-  .court-container { padding: 4px 8px; }
-  .shot-summary { padding: 4px 8px; flex-wrap: wrap; gap: 6px; }
 
-  /* Coluna direita: ações */
-  .actions-section {
-    width: 200px;
-    flex-shrink: 0;
-    overflow-y: auto;
-    max-height: calc(100vh - 120px);
-    padding: 4px 0 8px;
-  }
-  .actions-group-label { padding: 4px 10px 3px; font-size: 10px; }
-  .actions-row { gap: 4px; padding: 0 6px; }
-  .action-btn { font-size: 13px; padding: 10px 4px; min-width: 0; }
-  .actions-group { margin-bottom: 4px; }
+  // ── GAME ──────────────────────────────────────────────────────────────────
+  const td = game.teams[activeTeam];
+  const sp = selectedPlayer !== null ? td.players[selectedPlayer] : null;
+  const activeShots = sp ? (sp.shots||[]) : td.players.flatMap(p => p.shots||[]);
 
-  /* Selected bar compacta */
-  .selected-bar { padding: 5px 10px; }
-  .sel-badge { font-size: 13px; }
-  .mini-stat b { font-size: 13px; }
-  .mini-stat { font-size: 10px; }
+  return (
+    <div className="app">
+      {toast && <div className="toast">{toast}</div>}
 
-  /* Stats em landscape: duas tabelas lado a lado */
-  .stats-view { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
-  .stats-block { flex: 1; min-width: 300px; }
-  .stats-header { padding: 8px 12px 6px; font-size: 13px; }
-  .stats-total-score { font-size: 18px; }
-  .stats-table { font-size: 11px; min-width: 300px; }
-  .stats-table th { font-size: 9px; padding: 4px; }
-  .stats-table td { padding: 5px 4px; }
+      <header className="header">
+        <div className="header-top">
+          <button className="back-btn" onClick={() => { setRunning(false); setScreen('home'); }}>‹ Voltar</button>
+          <div className="header-game-label">{game.teams[0].name} vs {game.teams[1].name}</div>
+          <div className="export-btns">
+            <button className="export-btn-sm" onClick={() => exportStatsCSV(game)}>Stats</button>
+            <button className="export-btn-sm green" onClick={() => exportShotsCSV(game)}>Arrem.</button>
+          </div>
+        </div>
+        <div className="scoreboard">
+          <div className="team-score" data-active={activeTeam===0}
+            onClick={() => { setActiveTeam(0); setSelectedPlayer(null); setShotMode(false); }}>
+            <span className="team-name">{game.teams[0].name}</span>
+            <span className="score">{game.teams[0].score}</span>
+          </div>
+          <div className="center-info">
+            <span className="quarter-label">{QUARTERS[game.quarter]}</span>
+            <div className="clock">{fmtTime(game.clock)}</div>
+            <div className="clock-btns">
+              <button onClick={() => setRunning(r => !r)}>{running ? '⏸' : '▶'}</button>
+              <button onClick={() => setGame(g => ({...g, clock:600}))}>↺</button>
+              <button onClick={() => setGame(g => ({...g, quarter:Math.min(g.quarter+1,4), clock:600}))}>
+                ›{QUARTERS[Math.min(game.quarter+1,4)]}
+              </button>
+            </div>
+          </div>
+          <div className="team-score right" data-active={activeTeam===1}
+            onClick={() => { setActiveTeam(1); setSelectedPlayer(null); setShotMode(false); }}>
+            <span className="score">{game.teams[1].score}</span>
+            <span className="team-name">{game.teams[1].name}</span>
+          </div>
+        </div>
+        <nav className="nav">
+          {[['scout','Scout'],['stats','Stats'],['log','Log']].map(([v,l]) => (
+            <button key={v} className="nav-btn" data-active={view===v}
+              onClick={() => { setView(v); if(v!=='scout') setShotMode(false); }}>{l}</button>
+          ))}
+        </nav>
+      </header>
 
-  /* Log em landscape */
-  .log-entry { padding: 6px 12px; }
-  .log-player { font-size: 13px; }
-  .log-action { font-size: 12px; }
+      {/* ── SCOUT ── */}
+      {view==='scout' && (
+        <main className="scout-view">
+          <div className="team-tabs">
+            {game.teams.map((t,ti) => (
+              <button key={ti} className="team-tab" data-active={activeTeam===ti}
+                onClick={() => { setActiveTeam(ti); setSelectedPlayer(null); setShotMode(false); }}>
+                {t.name} <span className="tab-score">{t.score}</span>
+              </button>
+            ))}
+          </div>
 
-  /* Home em landscape */
-  .home-screen { padding: 16px; flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 16px; }
-  .home-logo { flex-direction: row; align-items: center; gap: 12px; margin-top: 0; width: 100%; }
-  .home-title { font-size: 22px; }
-  .home-sub { font-size: 11px; }
-  .btn-new-game { max-width: 200px; padding: 12px; font-size: 16px; }
-  .recent-games { flex: 1; min-width: 280px; }
-  .game-card { padding: 8px 10px; }
-  .game-card-teams { font-size: 13px; }
-  .game-card-score { font-size: 16px; }
+          <section className="players-section">
+            <div className="section-label">Atleta</div>
+            <div className="players-grid">
+              {td.players.map((p,pi) => (
+                <button key={pi} className="player-btn"
+                  data-active={selectedPlayer===pi} data-bench={!p.active}
+                  onClick={() => setSelectedPlayer(pi)}>
+                  <span className="pnum">#{p.number}</span>
+                  <span className="pname">{p.name.split(' ')[0]}</span>
+                  <span className="ppts">{p.pts}p</span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {sp && (
+            <div className="selected-bar">
+              <span className="sel-badge">#{sp.number} {sp.name}</span>
+              <div className="sel-mini-stats">
+                {[['PTS',sp.pts],['AST',sp.ast],['REB',sp.reb+sp.oreb],
+                  ['STL',sp.stl],['TO',sp.to],['FL',sp.fouls]].map(([k,v]) => (
+                  <span key={k} className="mini-stat" data-warn={k==='TO'&&v>2} data-danger={k==='FL'&&v>=4}>
+                    <b>{v}</b>{k}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Mapa de arremessos inline no scout */}
+          <section className="court-section">
+            <div className="court-section-header">
+              <div className="section-label" style={{padding:'8px 0 0'}}>
+                Mapa de arremessos — {sp ? `#${sp.number} ${sp.name.split(' ')[0]}` : 'time inteiro'}
+              </div>
+              <button
+                className={`shot-mode-btn ${shotMode ? 'active' : ''}`}
+                disabled={selectedPlayer===null}
+                onClick={() => setShotMode(m => !m)}>
+                {shotMode ? '✓ Marcando' : '+ Marcar'}
+              </button>
+            </div>
+            {shotMode && <div className="shot-hint">Toque na quadra para registrar o arremesso</div>}
+            <div ref={courtRef} className="court-container">
+              <BasketballCourt shots={activeShots} onCourtClick={handleCourtClick} shotMode={shotMode}/>
+            </div>
+            {activeShots.length > 0 && (
+              <div className="shot-summary">
+                <span className="shot-sum-item made">● {activeShots.filter(s=>s.made).length} convertidos</span>
+                <span className="shot-sum-item missed">✕ {activeShots.filter(s=>!s.made).length} errados</span>
+                <span className="shot-sum-item pct">
+                  {pct(activeShots.filter(s=>s.made).length, activeShots.length)} FG
+                </span>
+                <span className="shot-sum-item three">
+                  3pts: {pct(activeShots.filter(s=>s.made&&s.three).length, activeShots.filter(s=>s.three).length)}
+                </span>
+              </div>
+            )}
+          </section>
+
+          <section className="actions-section">
+            <div className="actions-group">
+              <div className="actions-group-label">Arremessos</div>
+              <div className="actions-row">
+                {ACTIONS.filter(a=>a.group==='shoot').map(a => (
+                  <button key={a.id} className="action-btn" style={{'--ac':a.color}} onClick={() => applyAction(a)}>{a.label}</button>
+                ))}
+              </div>
+            </div>
+            <div className="actions-group">
+              <div className="actions-group-label">Lances Livres</div>
+              <div className="actions-row">
+                {ACTIONS.filter(a=>a.group==='ft').map(a => (
+                  <button key={a.id} className="action-btn" style={{'--ac':a.color}} onClick={() => applyAction(a)}>{a.label}</button>
+                ))}
+              </div>
+            </div>
+            <div className="actions-group">
+              <div className="actions-group-label">Outras Ações</div>
+              <div className="actions-row wrap">
+                {ACTIONS.filter(a=>a.group==='misc').map(a => (
+                  <button key={a.id} className="action-btn" style={{'--ac':a.color}} onClick={() => applyAction(a)}>{a.label}</button>
+                ))}
+              </div>
+            </div>
+          </section>
+        </main>
+      )}
+
+      {/* ── STATS ── */}
+      {view==='stats' && (
+        <main className="stats-view">
+          {game.teams.map((team,ti) => {
+            const tot = totals(team);
+            const active = team.players.filter(p=>p.pts||p.ast||p.reb||p.oreb||p.stl||p.blk||p.to||p.fg2a||p.fg3a||p.fouls);
+            return (
+              <div key={ti} className="stats-block">
+                <div className="stats-header">
+                  <span>{team.name}</span>
+                  <span className="stats-total-score">{team.score} pts</span>
+                </div>
+                {active.length===0 && <div className="empty-stats">Sem dados ainda</div>}
+                {active.length>0 && (
+                  <div className="table-wrap">
+                    <table className="stats-table">
+                      <thead>
+                        <tr><th>Atleta</th><th>PTS</th><th>AST</th><th>REB</th><th>STL</th><th>BLK</th><th>TO</th><th>FG%</th><th>3P%</th><th>LL%</th><th>FL</th></tr>
+                      </thead>
+                      <tbody>
+                        {active.map(p => (
+                          <tr key={p.id}>
+                            <td className="player-cell"><span className="num-badge">#{p.number}</span>{p.name}</td>
+                            <td className="pts-cell">{p.pts}</td>
+                            <td>{p.ast}</td><td>{p.reb+p.oreb}</td>
+                            <td>{p.stl}</td><td>{p.blk}</td>
+                            <td data-warn={p.to>2}>{p.to}</td>
+                            <td>{pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)}</td>
+                            <td>{pct(p.fg3m,p.fg3a)}</td>
+                            <td>{pct(p.ftm,p.fta)}</td>
+                            <td data-warn={p.fouls>=4}>{p.fouls}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <td>Time</td><td className="pts-cell">{tot.pts}</td>
+                          <td>{tot.ast}</td><td>{tot.reb+tot.oreb}</td>
+                          <td>{tot.stl}</td><td>{tot.blk}</td><td>{tot.to}</td>
+                          <td>{pct(tot.fg2m+tot.fg3m,tot.fg2a+tot.fg3a)}</td>
+                          <td>{pct(tot.fg3m,tot.fg3a)}</td>
+                          <td>{pct(tot.ftm,tot.fta)}</td>
+                          <td>{tot.fouls}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </main>
+      )}
+
+      {/* ── LOG ── */}
+      {view==='log' && (
+        <main className="log-view">
+          <div className="log-top">
+            <span>{game.log.length} eventos</span>
+            {game.log.length>0 && (
+              <button className="clear-btn"
+                onClick={() => window.confirm('Limpar histórico?') && setGame(g=>({...g,log:[]}))}>
+                Limpar
+              </button>
+            )}
+          </div>
+          {game.log.length===0 && <div className="empty-log">Sem eventos. Inicie o scout.</div>}
+          <div className="log-list">
+            {game.log.map(e => (
+              <div key={e.id} className="log-entry">
+                <div className="log-meta">
+                  <span className="log-q">{e.q}</span>
+                  <span>{e.time}</span>
+                  <span className="log-team-name">{e.team}</span>
+                </div>
+                <div className="log-body">
+                  <span className="log-player">{e.player}</span>
+                  <span className="log-action" style={{color:e.color}}>{e.action}</span>
+                  {e.pts>0 && <span className="log-pts">+{e.pts}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </main>
+      )}
+    </div>
+  );
 }
-
-/* Tablet landscape (tela maior deitada) */
-@media (orientation: landscape) and (min-height: 600px) {
-
-  .app { max-width: 100%; }
-
-  .scoreboard { padding: 8px 20px; }
-  .score { font-size: 36px; }
-
-  /* Scout em 3 colunas com mais espaço */
-  .scout-view { flex-direction: row; flex-wrap: wrap; }
-  .team-tabs { width: 100%; }
-
-  .players-section {
-    width: 200px;
-    flex-shrink: 0;
-    border-bottom: none;
-    border-right: 1px solid var(--border);
-  }
-  .players-grid { grid-template-columns: repeat(3, 1fr); }
-
-  .court-section {
-    flex: 1;
-    border-bottom: none;
-    border-right: 1px solid var(--border);
-  }
-
-  .actions-section {
-    width: 220px;
-    flex-shrink: 0;
-    padding: 4px 0 12px;
-  }
-  .action-btn { font-size: 15px; padding: 13px 6px; }
-
-  /* Stats em duas colunas */
-  .stats-view { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
-  .stats-block { flex: 1; min-width: 400px; }
-}
-
-/* Shot hint e summary ajustes */
-.shot-hint {
-  padding: 4px 10px 5px;
-  font-size: 11px;
-  color: var(--green);
-  font-style: italic;
-}
-
-.court-section {
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
-}
-
-.court-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 14px 0;
-}
-
-.shot-mode-btn {
-  background: var(--bg3);
-  border: 1.5px solid var(--border);
-  color: var(--muted);
-  font-family: var(--fd);
-  font-size: 13px;
-  font-weight: 700;
-  padding: 7px 12px;
-  border-radius: var(--r);
-  cursor: pointer;
-  white-space: nowrap;
-  margin-top: 6px;
-}
-.shot-mode-btn:disabled { opacity: .35; cursor: not-allowed; }
-.shot-mode-btn.active { background: rgba(34,197,94,.12); border-color: var(--green); color: var(--green); }
-
-.court-container { padding: 8px 10px; }
-
-.court-svg { width: 100%; border-radius: var(--r); border: 1px solid var(--border); display: block; }
-
-.shot-summary {
-  display: flex;
-  gap: 12px;
-  padding: 4px 14px 8px;
-  font-family: var(--fd);
-  font-size: 13px;
-  font-weight: 600;
-}
-.shot-sum-item.made   { color: var(--green); }
-.shot-sum-item.missed { color: var(--red); }
-.shot-sum-item.pct    { color: var(--accent); }
-.shot-sum-item.three  { color: var(--blue); }
-
-.export-btns { display: flex; gap: 4px; }
-.export-btn.green, .export-btn-sm.green { color: var(--blue); border-color: rgba(59,130,246,.3); }
