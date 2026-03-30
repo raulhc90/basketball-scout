@@ -663,3 +663,143 @@ td[data-warn=true] { color:var(--yellow); font-weight:700; }
   padding: 1px 5px; border-radius: 3px; margin-left: 5px;
 }
 tr[data-disq=true] { opacity: .6; }
+
+/* ═══════════════════════════════════════════
+   CONFIRM SHOT MODAL (in-app, sem popup)
+═══════════════════════════════════════════ */
+.confirm-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200;
+}
+.confirm-modal {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--border-radius-lg, 12px);
+  padding: 24px 20px 16px;
+  width: min(320px, 90vw);
+  display: flex; flex-direction: column; gap: 14px;
+  text-align: center;
+}
+.confirm-title {
+  font-family: var(--fd);
+  font-size: 18px; font-weight: 700;
+  color: var(--text);
+}
+.confirm-btns {
+  display: flex; gap: 10px;
+}
+.confirm-btn {
+  flex: 1; border: none; border-radius: var(--r);
+  font-family: var(--fd); font-size: 18px; font-weight: 800;
+  padding: 18px 10px; cursor: pointer; transition: opacity .12s;
+}
+.confirm-btn:active { opacity: .8; }
+.confirm-btn.made   { background: #22c55e; color: #fff; }
+.confirm-btn.missed { background: var(--bg4); color: var(--muted); border: 1.5px solid var(--border); }
+.confirm-cancel {
+  background: none; border: none; color: var(--muted);
+  font-size: 13px; cursor: pointer; padding: 4px;
+}
+
+/* ═══════════════════════════════════════════
+   SUBSTITUIÇÃO
+═══════════════════════════════════════════ */
+.section-label-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px 6px;
+}
+.sub-quick-btn {
+  background: var(--bg4); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--fd); font-size: 13px; font-weight: 700;
+  padding: 5px 12px; border-radius: 5px; cursor: pointer;
+  letter-spacing: .04em;
+}
+.sub-quick-btn:active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.sub-out-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 4px 10px;
+}
+.sub-label {
+  font-family: var(--fd); font-size: 12px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+}
+.sub-player-name {
+  font-family: var(--fd); font-size: 16px; font-weight: 700;
+  color: var(--red);
+}
+.sub-in-btn { border-color: rgba(34,197,94,.3) !important; }
+.sub-in-btn:active { background: rgba(34,197,94,.15) !important; border-color: var(--green) !important; }
+
+/* ═══════════════════════════════════════════
+   BONUS FT BUTTON
+═══════════════════════════════════════════ */
+.bonus-ft-btn {
+  background: rgba(239,68,68,.12) !important;
+  border-color: rgba(239,68,68,.4) !important;
+  color: var(--red) !important;
+  animation: pulse-red 1.5s ease-in-out infinite;
+}
+@keyframes pulse-red {
+  0%,100% { border-color: rgba(239,68,68,.4) !important; }
+  50%      { border-color: rgba(239,68,68,.9) !important; }
+}
+
+/* ═══════════════════════════════════════════
+   FALTA — badges e alertas (completo)
+═══════════════════════════════════════════ */
+.team-foul-dots { display:flex; gap:3px; margin-top:3px; }
+.foul-dot {
+  width:7px; height:7px; border-radius:50%;
+  background:var(--bg4); border:1px solid var(--border);
+  transition: background .15s;
+}
+.foul-dot[data-filled=true] { background:#f97316; border-color:#c2530a; }
+.foul-dot[data-filled=true][data-bonus=true] { background:var(--red); border-color:#991b1b; }
+
+.bonus-bar {
+  background:rgba(239,68,68,.15); border-top:1px solid rgba(239,68,68,.3);
+  color:var(--red); font-family:var(--fd); font-size:11px; font-weight:700;
+  letter-spacing:.1em; text-transform:uppercase; text-align:center; padding:5px;
+}
+.pfoul-badge {
+  font-family:var(--fd); font-size:10px; font-weight:800;
+  padding:1px 4px; border-radius:3px;
+  background:rgba(249,115,22,.2); color:var(--accent);
+}
+.pfoul-badge[data-trouble=true] { background:rgba(234,179,8,.2);  color:var(--yellow); }
+.pfoul-badge[data-disq=true]    { background:rgba(239,68,68,.25); color:var(--red);    }
+.player-btn[data-trouble=true]  { border-color:rgba(234,179,8,.5); }
+.player-btn[data-disq=true]     { border-color:rgba(239,68,68,.5); opacity:.55; }
+.next-q-btn:disabled { opacity:.4; cursor:not-allowed; }
+
+.foul-alert { border-radius:var(--r); padding:8px 12px; margin-bottom:8px; font-family:var(--fd); font-size:13px; font-weight:700; }
+.foul-alert.danger { background:rgba(239,68,68,.15); color:var(--red);    border:1px solid rgba(239,68,68,.3); }
+.foul-alert.warn   { background:rgba(234,179,8,.12); color:var(--yellow); border:1px solid rgba(234,179,8,.3); }
+.foul-alert.info   { background:rgba(59,130,246,.12);color:var(--blue);   border:1px solid rgba(59,130,246,.3); }
+.foul-info-row { display:flex; gap:12px; flex-wrap:wrap; padding:6px 4px 10px; font-size:13px; color:var(--muted); }
+.foul-info-row b { color:var(--text); font-weight:700; }
+.foul-types-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+.foul-type-btn {
+  background:var(--bg3); border:1.5px solid var(--bg4);
+  border-left:4px solid var(--fc,var(--accent));
+  border-radius:var(--r); padding:12px 10px;
+  display:flex; flex-direction:column; gap:3px;
+  cursor:pointer; text-align:left; transition:all .12s;
+}
+.foul-type-btn:active { background:color-mix(in srgb,var(--fc) 15%,var(--bg3)); }
+.foul-type-label { font-family:var(--fd); font-size:15px; font-weight:700; color:var(--fc,var(--text)); }
+.foul-type-desc  { font-size:11px; color:var(--muted); }
+
+.fouls-summary { padding:12px 14px; border-bottom:1px solid var(--border); background:var(--bg2); }
+.fouls-summary-title { font-family:var(--fd); font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+.fouls-table { width:100%; border-collapse:collapse; font-size:13px; }
+.fouls-table th { font-family:var(--fd); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); padding:4px 8px; text-align:center; border-bottom:1px solid var(--border); }
+.fouls-table th:first-child { text-align:left; }
+.fouls-table td { padding:6px 8px; text-align:center; color:var(--text); }
+.fouls-table td:first-child { text-align:left; font-weight:600; }
+.fouls-table td[data-warn=true] { color:var(--red); font-weight:800; }
+.disq-tag { font-family:var(--fd); font-size:10px; font-weight:800; background:rgba(239,68,68,.2); color:var(--red); padding:1px 5px; border-radius:3px; margin-left:5px; }
+tr[data-disq=true] { opacity:.6; }
