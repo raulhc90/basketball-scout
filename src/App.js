@@ -34,6 +34,8 @@ const newGame = (nameA='Time A', nameB='Time B', rosterA=DEFAULT_TEAM_A, rosterB
   dateFull: new Date().toISOString(),
   teams: [mkTeam(nameA, rosterA), mkTeam(nameB, rosterB)],
   quarter: 0, clock: 600, log: [], finished: false,
+  // Faltas por quarto: teamFouls[equipe][quarto]
+  teamFouls: [[0,0,0,0,0],[0,0,0,0,0]],
 });
 
 const ACTIONS = [
@@ -52,12 +54,12 @@ const ACTIONS = [
   { id:'fouls',   label:'Falta',    pts:0, color:'#f97316', group:'misc'  },
 ];
 
-// Quadra NBA: 28.65m x 15.24m → viewBox 600x320
-// Origem (0,0) = canto inferior esquerdo da quadra
-// SVG y invertido: y_svg = 320 - y_real
-// Cesta esquerda: x=155cm=~32px, Cesta direita: x=2710cm=~568px
-// Linha de 3pts: raio 723cm do aro, linha lateral a 91cm do aro
-// Garrafão: 490x580cm
+// Limite de faltas por quarto para bonificação (NBB/NBA: 5 por quarto)
+const TEAM_FOUL_BONUS = 5;
+// Faltas para disqualificação
+const FOUL_DISQUALIFY = 6;
+// Faltas para foul trouble
+const FOUL_TROUBLE = 4;
 
 const fmtTime = s => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
 const pct = (m,a) => a===0 ? '—' : `${Math.round(m/a*100)}%`;
@@ -76,7 +78,6 @@ function saveGames(games) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(games)); } catch {}
 }
 
-// ─── CSV Exports ──────────────────────────────────────────────────────────────
 function exportStatsCSV(game) {
   const lines = ['Atleta,Time,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG3M,FG3A,FTM,FTA,FG%,3P%,LL%,FALTAS'];
   game.teams.forEach(team => {
@@ -86,22 +87,22 @@ function exportStatsCSV(game) {
     const tot = totals(team);
     lines.push(`"TOTAL","${team.name}",${tot.pts},${tot.ast},${tot.reb},${tot.oreb},${tot.stl},${tot.blk},${tot.to},${tot.fg2m},${tot.fg2a},${tot.fg3m},${tot.fg3a},${tot.ftm},${tot.fta},${pct(tot.fg2m+tot.fg3m,tot.fg2a+tot.fg3a)},${pct(tot.fg3m,tot.fg3a)},${pct(tot.ftm,tot.fta)},${tot.fouls}`);
   });
-  download(lines.join('\n'), `stats_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
+  dl(lines.join('\n'), `stats_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
 
 function exportShotsCSV(game) {
-  const lines = ['Atleta,Time,Quarto,Tempo,X_pct,Y_pct,Convertido,Tipo,Zona'];
+  const lines = ['Atleta,Time,Quarto,Tempo,X_pct,Y_pct,Convertido,Tipo,Assistencia'];
   game.teams.forEach(team => {
     team.players.forEach(p => {
       (p.shots||[]).forEach(s => {
-        lines.push(`"#${p.number} ${p.name}","${team.name}","${s.q||''}","${s.time||''}",${s.x.toFixed(2)},${s.y.toFixed(2)},${s.made?'Sim':'Não'},${s.three?'3pts':'2pts'},"${s.zone||''}"`);
+        lines.push(`"#${p.number} ${p.name}","${team.name}","${s.q||''}","${s.time||''}",${s.x.toFixed(2)},${s.y.toFixed(2)},${s.made?'Sim':'Não'},${s.three?'3pts':'2pts'},"${s.assistedBy||''}"`);
       });
     });
   });
-  download(lines.join('\n'), `arremessos_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
+  dl(lines.join('\n'), `arremessos_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
 
-function download(content, filename) {
+function dl(content, filename) {
   const blob = new Blob(['\ufeff'+content], {type:'text/csv;charset=utf-8'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -109,87 +110,39 @@ function download(content, filename) {
   a.click();
 }
 
-// ─── Basketball Court SVG ─────────────────────────────────────────────────────
-// viewBox 0 0 600 320, orientação horizontal, ataque para direita
-// Medidas baseadas na NBA/NBB: quadra 28m x 15m
-// Escala: 600/2865 = 0.2094 px/cm | 320/1524 = 0.2100 px/cm ≈ 1px = 4.77cm
-// Cesta: x=160(esq) e x=440(dir), y=160 (centro)
-// Garrafão: 580x490cm → 122x103px
-// Linha 3pts: raio 675cm → 141px, linha lateral a 65cm → 14px
-// Linha central: x=300
-
-function BasketballCourt({ shots=[], onCourtClick, shotMode=false, filterTeam=null }) {
-  // Dimensões SVG
-  const W = 600, H = 320;
-  const cx1 = 57,  cy = 160; // cesta esquerda
-  const cx2 = 543; // cesta direita
-
-  // Garrafão esq: x0=0..122, y: cy±51
-  const paint1 = { x:0, y:cy-51, w:122, h:103 };
-  // Garrafão dir
-  const paint2 = { x:W-122, y:cy-51, w:122, h:103 };
-
-  // Zona de cor por tipo
-  const getColor = (shot) => shot.made
-    ? 'rgba(34,197,94,0.85)'
-    : 'rgba(239,68,68,0.85)';
+// ─── Quadra SVG ───────────────────────────────────────────────────────────────
+function BasketballCourt({ shots=[], onCourtClick, shotMode=false }) {
+  const W = 600, H = 320, cy = 160;
+  const cx1 = 57, cx2 = 543;
+  const getColor = s => s.made ? 'rgba(34,197,94,0.9)' : 'rgba(239,68,68,0.9)';
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="court-svg"
+    <svg viewBox={`0 0 ${W} ${H}`} className="court-svg"
       style={{cursor: shotMode ? 'crosshair' : 'default'}}
-      onClick={onCourtClick}
-    >
-      {/* Fundo da quadra */}
+      onClick={onCourtClick}>
       <rect x="0" y="0" width={W} height={H} fill="#1a1f2a"/>
-
-      {/* Linhas da quadra - cor sutil */}
       <g stroke="#3a4560" strokeWidth="1.2" fill="none">
-        {/* Borda da quadra */}
         <rect x="2" y="2" width={W-4} height={H-4} rx="2"/>
-
-        {/* Linha central */}
         <line x1={W/2} y1="2" x2={W/2} y2={H-2}/>
-        {/* Círculo central - raio 180cm → 38px */}
         <circle cx={W/2} cy={cy} r="38"/>
-
-        {/* Garrafão esquerdo */}
-        <rect x={paint1.x+2} y={paint1.y} width={paint1.w} height={paint1.h}/>
-        {/* Linha de lance livre esq */}
-        <line x1={paint1.x+paint1.w} y1={paint1.y} x2={paint1.x+paint1.w} y2={paint1.y+paint1.h}/>
-        {/* Semicírculo lance livre esq (acima da linha) */}
-        <path d={`M ${paint1.x+paint1.w} ${cy-51} A 51 51 0 0 1 ${paint1.x+paint1.w} ${cy+51}`} strokeDasharray="4 3"/>
-
-        {/* Garrafão direito */}
-        <rect x={paint2.x} y={paint2.y} width={paint2.w-2} height={paint2.h}/>
-        {/* Linha de lance livre dir */}
-        <line x1={paint2.x} y1={paint2.y} x2={paint2.x} y2={paint2.y+paint2.h}/>
-        {/* Semicírculo lance livre dir */}
-        <path d={`M ${paint2.x} ${cy-51} A 51 51 0 0 0 ${paint2.x} ${cy+51}`} strokeDasharray="4 3"/>
-
-        {/* Linha de 3pts esquerda:
-            NBB: raio 675cm do aro, reta lateral a 90cm do aro
-            90cm → 19px; 675cm → 141px
-            Linha reta lateral: x=cx1..cx1+38, y=cy±75
-            Arco: de y=cy-75 até y=cy+75 */}
-        {/* Retas laterais esq */}
-        <line x1="2" y1={cy-75} x2={cx1+38} y2={cy-75}/>
-        <line x1="2" y1={cy+75} x2={cx1+38} y2={cy+75}/>
-        {/* Arco 3pts esq */}
-        <path d={`M ${cx1+38} ${cy-75} A 141 141 0 0 1 ${cx1+38} ${cy+75}`}/>
-
-        {/* Linha de 3pts direita */}
-        <line x1={W-2} y1={cy-75} x2={cx2-38} y2={cy-75}/>
-        <line x1={W-2} y1={cy+75} x2={cx2-38} y2={cy+75}/>
-        <path d={`M ${cx2-38} ${cy-75} A 141 141 0 0 0 ${cx2-38} ${cy+75}`}/>
-
-        {/* Área restrita esq (raio 125cm → 26px) */}
+        {/* Garrafão esq */}
+        <rect x="2" y={cy-51} width="120" height="103"/>
+        <path d={`M 122 ${cy-51} A 51 51 0 0 1 122 ${cy+51}`} strokeDasharray="4 3"/>
+        {/* Garrafão dir */}
+        <rect x="478" y={cy-51} width="120" height="103"/>
+        <path d={`M 478 ${cy-51} A 51 51 0 0 0 478 ${cy+51}`} strokeDasharray="4 3"/>
+        {/* 3pts esq */}
+        <line x1="2"   y1={cy-75} x2="95" y2={cy-75}/>
+        <line x1="2"   y1={cy+75} x2="95" y2={cy+75}/>
+        <path d={`M 95 ${cy-75} A 141 141 0 0 1 95 ${cy+75}`}/>
+        {/* 3pts dir */}
+        <line x1="505" y1={cy-75} x2={W-2} y2={cy-75}/>
+        <line x1="505" y1={cy+75} x2={W-2} y2={cy+75}/>
+        <path d={`M 505 ${cy-75} A 141 141 0 0 0 505 ${cy+75}`}/>
+        {/* Área restrita */}
         <path d={`M ${cx1} ${cy-26} A 26 26 0 0 1 ${cx1} ${cy+26}`}/>
-        {/* Área restrita dir */}
         <path d={`M ${cx2} ${cy-26} A 26 26 0 0 0 ${cx2} ${cy+26}`}/>
       </g>
-
       {/* Cestas */}
       <g stroke="#f97316" strokeWidth="1.5" fill="none">
         <circle cx={cx1} cy={cy} r="5"/>
@@ -197,27 +150,23 @@ function BasketballCourt({ shots=[], onCourtClick, shotMode=false, filterTeam=nu
         <circle cx={cx2} cy={cy} r="5"/>
         <line x1={W-2} y1={cy} x2={cx2+5} y2={cy}/>
       </g>
-
-      {/* Rótulos das zonas (muito discretos) */}
-      <g fill="#3a4560" fontSize="9" fontFamily="sans-serif" textAnchor="middle">
-        <text x="60"  y="30">3pts</text>
-        <text x="300" y="18">3pts topo</text>
-        <text x="540" y="30">3pts</text>
-        <text x="61"  y={cy+4}>Garrafão</text>
-        <text x="539" y={cy+4}>Garrafão</text>
+      {/* Labels discretos */}
+      <g fill="#3a4560" fontSize="8" fontFamily="sans-serif" textAnchor="middle">
+        <text x="48"  y="20">3pts</text>
+        <text x={W/2} y="16">3pts topo</text>
+        <text x="552" y="20">3pts</text>
+        <text x="62"  y={cy+4}>Garrafão</text>
+        <text x="538" y={cy+4}>Garrafão</text>
       </g>
-
       {/* Shots */}
       {shots.map((s, i) => {
-        // x,y vêm em % do SVG
-        const px = s.x * W / 100;
-        const py = s.y * H / 100;
+        const px = s.x * W / 100, py = s.y * H / 100;
         return s.made ? (
           <circle key={i} cx={px} cy={py} r="5" fill={getColor(s)} stroke="#fff" strokeWidth="0.5" opacity="0.9"/>
         ) : (
           <g key={i} opacity="0.9">
-            <line x1={px-4} y1={py-4} x2={px+4} y2={py+4} stroke={getColor(s)} strokeWidth="1.5" strokeLinecap="round"/>
-            <line x1={px+4} y1={py-4} x2={px-4} y2={py+4} stroke={getColor(s)} strokeWidth="1.5" strokeLinecap="round"/>
+            <line x1={px-4} y1={py-4} x2={px+4} y2={py+4} stroke={getColor(s)} strokeWidth="1.8" strokeLinecap="round"/>
+            <line x1={px+4} y1={py-4} x2={px-4} y2={py+4} stroke={getColor(s)} strokeWidth="1.8" strokeLinecap="round"/>
           </g>
         );
       })}
@@ -225,27 +174,108 @@ function BasketballCourt({ shots=[], onCourtClick, shotMode=false, filterTeam=nu
   );
 }
 
-// ─── Detecta se arremesso é de 3pts baseado na posição na quadra ──────────────
 function isThreePointer(xPct, yPct) {
-  const W = 600, H = 320;
-  const px = xPct * W / 100;
-  const py = yPct * H / 100;
-  const cy = 160;
-
-  // Cesta mais próxima
-  const distLeft  = Math.sqrt((px-57)**2  + (py-cy)**2);
-  const distRight = Math.sqrt((px-543)**2 + (py-cy)**2);
-
-  if (distLeft < distRight) {
-    // Lado esquerdo: linha reta a y<85 ou y>235, arco raio>141
-    if (py < cy-75 || py > cy+75) return true; // acima/abaixo da reta lateral
-    if (px < 57+38) return false; // dentro do garrafão
-    return distLeft > 141;
+  const px = xPct * 6, py = yPct * 3.2, cy = 16;
+  const dL = Math.sqrt((px-5.7)**2 + (py-cy)**2);
+  const dR = Math.sqrt((px-54.3)**2 + (py-cy)**2);
+  if (dL < dR) {
+    if (py < cy-7.5 || py > cy+7.5) return true;
+    if (px < 9.5) return false;
+    return dL > 14.1;
   } else {
-    if (py < cy-75 || py > cy+75) return true;
-    if (px > 543-38) return false;
-    return distRight > 141;
+    if (py < cy-7.5 || py > cy+7.5) return true;
+    if (px > 50.5) return false;
+    return dR > 14.1;
   }
+}
+
+// ─── Modal de Assistência (após cesto) ────────────────────────────────────────
+function AssistModal({ players, scorerIdx, onSelect, onNone, onCancel }) {
+  return (
+    <div className="assist-overlay">
+      <div className="assist-modal">
+        <div className="assist-modal-header">
+          <span>Quem deu a assistência?</span>
+          <button className="modal-close" onClick={onCancel}>✕</button>
+        </div>
+        <div className="assist-modal-body">
+          <div className="assist-label">Selecione o atleta ou "Sem assistência"</div>
+          <button className="assist-none-btn" onClick={onNone}>
+            Sem assistência
+          </button>
+          <div className="assist-players-grid">
+            {players
+              .map((p, i) => ({ p, i }))
+              .filter(({ i }) => i !== scorerIdx)
+              .map(({ p, i }) => (
+                <button key={i} className="assist-player-btn" onClick={() => onSelect(i)}>
+                  <span className="assist-pnum">#{p.number}</span>
+                  <span className="assist-pname">{p.name.split(' ')[0]}</span>
+                  <span className="assist-past">{p.ast}ast</span>
+                </button>
+              ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Modal de Falta ───────────────────────────────────────────────────────────
+function FoulModal({ player, teamFoulsInQuarter, onType, onCancel }) {
+  const bonus = teamFoulsInQuarter >= TEAM_FOUL_BONUS;
+  const disq  = player.fouls >= FOUL_DISQUALIFY - 1;
+
+  const types = [
+    { id:'pessoal',   label:'Falta Pessoal',    desc:'Contato durante jogo',        color:'#f97316' },
+    { id:'tecnica',   label:'Falta Técnica',     desc:'Conduta antidesportiva',      color:'#ef4444' },
+    { id:'flagrante', label:'Falta Flagrante',   desc:'Contato excessivo / duro',    color:'#dc2626' },
+    { id:'ofensiva',  label:'Falta Ofensiva',    desc:'Carrinho / fora da área',     color:'#fb923c' },
+  ];
+
+  return (
+    <div className="assist-overlay">
+      <div className="assist-modal">
+        <div className="assist-modal-header">
+          <span>Falta — #{player.number} {player.name.split(' ')[0]}</span>
+          <button className="modal-close" onClick={onCancel}>✕</button>
+        </div>
+        <div className="assist-modal-body">
+          {/* Alertas contextuais */}
+          {disq && (
+            <div className="foul-alert danger">
+              ATENÇÃO: {player.fouls} faltas — próxima é DISQUALIFICAÇÃO!
+            </div>
+          )}
+          {!disq && player.fouls >= FOUL_TROUBLE && (
+            <div className="foul-alert warn">
+              Foul trouble: {player.fouls} faltas acumuladas
+            </div>
+          )}
+          {bonus && (
+            <div className="foul-alert info">
+              Time em bonificação ({teamFoulsInQuarter} faltas no quarto) — 2 lances livres
+            </div>
+          )}
+
+          <div className="foul-info-row">
+            <span>Faltas do atleta: <b>{player.fouls}</b></span>
+            <span>Faltas do time no quarto: <b>{teamFoulsInQuarter}</b></span>
+          </div>
+
+          <div className="foul-types-grid">
+            {types.map(t => (
+              <button key={t.id} className="foul-type-btn" style={{'--fc': t.color}}
+                onClick={() => onType(t.id)}>
+                <span className="foul-type-label">{t.label}</span>
+                <span className="foul-type-desc">{t.desc}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── New Game Modal ───────────────────────────────────────────────────────────
@@ -257,12 +287,8 @@ function NewGameModal({ onStart, onClose }) {
     b: DEFAULT_TEAM_B.map(p => ({...p})),
   });
 
-  const updatePlayer = (team, idx, field, val) => {
-    setPlayers(prev => ({
-      ...prev,
-      [team]: prev[team].map((p,i) => i===idx ? {...p,[field]:val} : p)
-    }));
-  };
+  const upd = (team, idx, field, val) =>
+    setPlayers(prev => ({ ...prev, [team]: prev[team].map((p,i) => i===idx ? {...p,[field]:val} : p) }));
 
   return (
     <div className="modal-overlay">
@@ -273,17 +299,15 @@ function NewGameModal({ onStart, onClose }) {
         </div>
         <div className="modal-body">
           <div className="modal-teams">
-            {[['a', nameA, setNameA], ['b', nameB, setNameB]].map(([key, name, setName]) => (
+            {[['a',nameA,setNameA],['b',nameB,setNameB]].map(([key,name,setName]) => (
               <div key={key} className="modal-team-col">
-                <input className="team-name-input" value={name} onChange={e => setName(e.target.value)} placeholder="Nome do time"/>
+                <input className="team-name-input" value={name} onChange={e => setName(e.target.value)}/>
                 <div className="modal-roster-header"><span>#</span><span>Nome</span></div>
                 <div className="modal-roster">
-                  {players[key].map((p, i) => (
+                  {players[key].map((p,i) => (
                     <div key={i} className="modal-player-row">
-                      <input className="num-input" value={p.number} maxLength={2}
-                        onChange={e => updatePlayer(key, i, 'number', e.target.value)}/>
-                      <input className="name-inp" value={p.name}
-                        onChange={e => updatePlayer(key, i, 'name', e.target.value)}/>
+                      <input className="num-input" value={p.number} maxLength={2} onChange={e => upd(key,i,'number',e.target.value)}/>
+                      <input className="name-inp" value={p.name} onChange={e => upd(key,i,'name',e.target.value)}/>
                     </div>
                   ))}
                 </div>
@@ -292,9 +316,7 @@ function NewGameModal({ onStart, onClose }) {
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn-start" onClick={() => onStart(nameA, nameB, players.a, players.b)}>
-            Iniciar Jogo
-          </button>
+          <button className="btn-start" onClick={() => onStart(nameA,nameB,players.a,players.b)}>Iniciar Jogo</button>
         </div>
       </div>
     </div>
@@ -313,8 +335,16 @@ export default function App() {
   const [toast, setToast]     = useState(null);
   const [showNewGame, setShowNewGame] = useState(false);
   const [shotMode, setShotMode]       = useState(false);
+
+  // Fluxos modais
+  // assistPending: { scorerIdx, xPct, yPct, made, three, pts } — aguarda quem assistiu
+  const [assistPending, setAssistPending] = useState(null);
+  // foulPending: true — aguarda tipo de falta
+  const [foulPending, setFoulPending]     = useState(false);
+
   const courtRef = useRef(null);
 
+  // Cronômetro
   useEffect(() => {
     if (!running || !game) return;
     const id = setInterval(() => {
@@ -326,6 +356,7 @@ export default function App() {
     return () => clearInterval(id);
   }, [running, game]);
 
+  // Auto-save
   useEffect(() => {
     if (!game) return;
     setGames(prev => {
@@ -336,11 +367,11 @@ export default function App() {
     });
   }, [game]);
 
-  const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 1600); };
+  const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 1800); };
 
   const startGame = (nameA, nameB, rosterA, rosterB) => {
-    const g = newGame(nameA, nameB, rosterA, rosterB);
-    setGame(g); setShowNewGame(false); setScreen('game');
+    setGame(newGame(nameA, nameB, rosterA, rosterB));
+    setShowNewGame(false); setScreen('game');
     setView('scout'); setActiveTeam(0); setSelectedPlayer(null);
     setRunning(false); setShotMode(false);
   };
@@ -351,19 +382,145 @@ export default function App() {
     setRunning(false); setShotMode(false);
   };
 
+  // Avança quarto — reseta clock e faltas do time no quarto
+  const nextQuarter = useCallback(() => {
+    setGame(g => {
+      if (!g) return g;
+      const nextQ = Math.min(g.quarter + 1, 4);
+      // Clock: quartos = 10min (600s), OT = 5min (300s)
+      const nextClock = nextQ === 4 ? 300 : 600;
+      return { ...g, quarter: nextQ, clock: nextClock };
+    });
+    setRunning(false);
+  }, []);
+
+  // ── Falta ──────────────────────────────────────────────────────────────────
+  const commitFoul = useCallback((foulType) => {
+    if (selectedPlayer === null || !game) return;
+    const pl = game.teams[activeTeam].players[selectedPlayer];
+    const newFoulCount = (pl.fouls || 0) + 1;
+    const isDisq = newFoulCount >= FOUL_DISQUALIFY;
+
+    setGame(g => {
+      const teamFouls = g.teamFouls
+        ? g.teamFouls.map((tf, ti) =>
+            ti === activeTeam
+              ? tf.map((f, qi) => qi === g.quarter ? f + 1 : f)
+              : tf)
+        : [[0,0,0,0,0],[0,0,0,0,0]];
+
+      const teams = g.teams.map((t, ti) => {
+        if (ti !== activeTeam) return t;
+        return {
+          ...t,
+          players: t.players.map((p, pi) => {
+            if (pi !== selectedPlayer) return p;
+            return { ...p, fouls: newFoulCount, active: isDisq ? false : p.active };
+          })
+        };
+      });
+
+      const entry = {
+        id: Date.now(), q: QUARTERS[g.quarter], time: fmtTime(g.clock),
+        team: g.teams[activeTeam].name,
+        player: `#${pl.number} ${pl.name.split(' ')[0]}`,
+        action: `Falta ${foulType}`, pts: 0, color: '#f97316'
+      };
+      return { ...g, teams, teamFouls, log: [entry, ...g.log] };
+    });
+
+    const tfq = (game.teamFouls?.[activeTeam]?.[game.quarter] || 0) + 1;
+    if (isDisq) showToast(`DISQUALIFICADO — #${pl.number} ${pl.name.split(' ')[0]}`);
+    else if (newFoulCount >= FOUL_TROUBLE) showToast(`Foul trouble — ${newFoulCount} faltas`);
+    else if (tfq >= TEAM_FOUL_BONUS) showToast(`Bonificação! Time com ${tfq} faltas no quarto`);
+    setFoulPending(false);
+  }, [selectedPlayer, activeTeam, game]);
+
+  // ── Registra cesto + pergunta assistência ─────────────────────────────────
+  const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx) => {
+    const pts = made ? (three ? 3 : 2) : 0;
+    const actionId = made ? (three ? 'fg3m' : 'fg2m') : (three ? 'fg3miss' : 'fg2miss');
+    const action = ACTIONS.find(a => a.id === actionId);
+
+    setGame(g => {
+      const teams = g.teams.map((t, ti) => {
+        if (ti !== activeTeam) return t;
+        const players = t.players.map((p, pi) => {
+          const n = { ...p };
+          if (pi === assistIdx) { n.ast = (n.ast||0) + 1; }
+          if (pi === playerIdx) {
+            if      (actionId==='fg2m')    { n.fg2m++; n.fg2a++; }
+            else if (actionId==='fg2miss') { n.fg2a++; }
+            else if (actionId==='fg3m')    { n.fg3m++; n.fg3a++; }
+            else if (actionId==='fg3miss') { n.fg3a++; }
+            n.pts = n.fg2m*2 + n.fg3m*3 + n.ftm;
+            if (xPct !== null) {
+              const assistPl = assistIdx !== null ? g.teams[activeTeam].players[assistIdx] : null;
+              n.shots = [...(n.shots||[]), {
+                x: xPct, y: yPct, made, three,
+                zone: three ? '3pts' : '2pts',
+                assistedBy: assistPl ? `#${assistPl.number} ${assistPl.name.split(' ')[0]}` : '',
+                q: QUARTERS[g.quarter], time: fmtTime(g.clock),
+              }];
+            }
+          }
+          return n;
+        });
+        return { ...t, score: t.score + pts, players };
+      });
+
+      const scorerPl = g.teams[activeTeam].players[playerIdx];
+      const assistPl = assistIdx !== null ? g.teams[activeTeam].players[assistIdx] : null;
+      const entries = [];
+      if (assistPl) {
+        entries.push({ id: Date.now(), q: QUARTERS[g.quarter], time: fmtTime(g.clock),
+          team: g.teams[activeTeam].name, player: `#${assistPl.number} ${assistPl.name.split(' ')[0]}`,
+          action: 'Assist.', pts: 0, color: '#a855f7' });
+      }
+      entries.push({ id: Date.now()+1, q: QUARTERS[g.quarter], time: fmtTime(g.clock),
+        team: g.teams[activeTeam].name, player: `#${scorerPl.number} ${scorerPl.name.split(' ')[0]}`,
+        action: action.label, pts, color: action.color });
+
+      return { ...g, teams, log: [...entries, ...g.log] };
+    });
+
+    if (made) showToast(`+${pts}${assistIdx !== null ? ' (assist)' : ''}`);
+    setAssistPending(null);
+    setShotMode(false);
+  }, [activeTeam]);
+
+  // ── Clique no botão de ação ────────────────────────────────────────────────
   const applyAction = useCallback(action => {
     if (selectedPlayer === null) { showToast('Selecione um atleta'); return; }
+
+    // Falta: abre modal de tipo
+    if (action.id === 'fouls') {
+      setFoulPending(true);
+      return;
+    }
+
+    // Arremessos de campo (sem posição): pergunta assistência se convertido
+    if (['fg2m','fg3m'].includes(action.id)) {
+      const three = action.id === 'fg3m';
+      // Abre modal de assistência
+      setAssistPending({ scorerIdx: selectedPlayer, xPct: null, yPct: null, made: true, three });
+      return;
+    }
+
+    // Arremessos errados: sem assistência, registra direto
+    if (['fg2miss','fg3miss'].includes(action.id)) {
+      commitShot(selectedPlayer, null, null, false, action.id==='fg3miss', null);
+      return;
+    }
+
+    // Lances livres e demais: registra direto
     setGame(g => {
       const teams = g.teams.map((t, ti) => {
         if (ti !== activeTeam) return t;
         const players = t.players.map((p, pi) => {
           if (pi !== selectedPlayer) return p;
           const n = { ...p };
-          if      (action.id==='fg2m')    { n.fg2m++; n.fg2a++; }
-          else if (action.id==='fg2miss') { n.fg2a++; }
-          else if (action.id==='fg3m')    { n.fg3m++; n.fg3a++; }
-          else if (action.id==='fg3miss') { n.fg3a++; }
-          else if (action.id==='ftm')     { n.ftm++;  n.fta++;  }
+          if      (action.id==='ftm')     { n.ftm++;  n.fta++;  }
           else if (action.id==='ftmiss')  { n.fta++;  }
           else                            { n[action.id] = (n[action.id]||0)+1; }
           n.pts = n.fg2m*2 + n.fg3m*3 + n.ftm;
@@ -372,119 +529,114 @@ export default function App() {
         return { ...t, score: t.score + action.pts, players };
       });
       const pl = g.teams[activeTeam].players[selectedPlayer];
-      const entry = {
-        id: Date.now(), q: QUARTERS[g.quarter], time: fmtTime(g.clock),
-        team: g.teams[activeTeam].name,
-        player: `#${pl.number} ${pl.name.split(' ')[0]}`,
-        action: action.label, pts: action.pts, color: action.color
-      };
+      const entry = { id: Date.now(), q: QUARTERS[g.quarter], time: fmtTime(g.clock),
+        team: g.teams[activeTeam].name, player: `#${pl.number} ${pl.name.split(' ')[0]}`,
+        action: action.label, pts: action.pts, color: action.color };
       return { ...g, teams, log: [entry, ...g.log] };
     });
     const p = game.teams[activeTeam].players[selectedPlayer];
     if (action.pts > 0) showToast(`+${action.pts} — ${p.name.split(' ')[0]}`);
-  }, [selectedPlayer, activeTeam, game]);
+  }, [selectedPlayer, activeTeam, game, commitShot]);
 
-  // Click na quadra para registrar arremesso com posição
+  // ── Clique na quadra (modo marcação) ──────────────────────────────────────
   const handleCourtClick = useCallback(e => {
     if (!shotMode || selectedPlayer === null || !courtRef.current) return;
     const rect = courtRef.current.getBoundingClientRect();
     const xPct = (e.clientX - rect.left) / rect.width * 100;
     const yPct = (e.clientY - rect.top)  / rect.height * 100;
     const three = isThreePointer(xPct, yPct);
-    const made = window.confirm(`Arremesso de ${three ? '3pts' : '2pts'} — Convertido?`);
-    const actionId = made ? (three ? 'fg3m' : 'fg2m') : (three ? 'fg3miss' : 'fg2miss');
-    const action = ACTIONS.find(a => a.id === actionId);
-
-    setGame(g => {
-      const teams = g.teams.map((t, ti) => {
-        if (ti !== activeTeam) return t;
-        const players = t.players.map((p, pi) => {
-          if (pi !== selectedPlayer) return p;
-          const n = { ...p };
-          if      (actionId==='fg2m')    { n.fg2m++; n.fg2a++; }
-          else if (actionId==='fg2miss') { n.fg2a++; }
-          else if (actionId==='fg3m')    { n.fg3m++; n.fg3a++; }
-          else if (actionId==='fg3miss') { n.fg3a++; }
-          n.pts = n.fg2m*2 + n.fg3m*3 + n.ftm;
-          n.shots = [...(n.shots||[]), {
-            x: xPct, y: yPct, made, three,
-            zone: three ? '3pts' : '2pts',
-            q: QUARTERS[g.quarter],
-            time: fmtTime(g.clock),
-          }];
-          return n;
-        });
-        return { ...t, score: t.score + (made ? (three?3:2) : 0), players };
-      });
-      const pl = g.teams[activeTeam].players[selectedPlayer];
-      const entry = {
-        id: Date.now(), q: QUARTERS[g.quarter], time: fmtTime(g.clock),
-        team: g.teams[activeTeam].name,
-        player: `#${pl.number} ${pl.name.split(' ')[0]}`,
-        action: action.label, pts: action.pts, color: action.color
-      };
-      return { ...g, teams, log: [entry, ...g.log] };
-    });
-    const p = game.teams[activeTeam].players[selectedPlayer];
-    if (made) showToast(`+${three?3:2} — ${p.name.split(' ')[0]}`);
-  }, [shotMode, selectedPlayer, activeTeam, game]);
+    const made  = window.confirm(`Arremesso de ${three ? '3pts' : '2pts'} — Convertido?`);
+    if (made) {
+      // Convertido: pergunta assistência
+      setAssistPending({ scorerIdx: selectedPlayer, xPct, yPct, made: true, three });
+    } else {
+      // Errado: sem assistência
+      commitShot(selectedPlayer, xPct, yPct, false, three, null);
+    }
+  }, [shotMode, selectedPlayer, commitShot]);
 
   // ── HOME ──────────────────────────────────────────────────────────────────
-  if (screen === 'home') {
-    return (
-      <div className="app">
-        {showNewGame && <NewGameModal onStart={startGame} onClose={() => setShowNewGame(false)}/>}
-        <div className="home-screen">
-          <div className="home-logo">
-            <div className="logo-ball">
-              <svg viewBox="0 0 60 60" width="60" height="60">
-                <circle cx="30" cy="30" r="28" fill="#f97316" stroke="#c2530a" strokeWidth="1"/>
-                <path d="M30 2 Q30 30 30 58" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
-                <path d="M2 30 Q30 30 58 30" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
-                <path d="M8 12 Q20 22 30 30 Q40 38 52 48" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
-                <path d="M52 12 Q40 22 30 30 Q20 38 8 48" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
-              </svg>
-            </div>
-            <div className="home-title">Basketball Scout</div>
-            <div className="home-sub">Análise ao vivo · Open Source · PWA</div>
+  if (screen === 'home') return (
+    <div className="app">
+      {showNewGame && <NewGameModal onStart={startGame} onClose={() => setShowNewGame(false)}/>}
+      <div className="home-screen">
+        <div className="home-logo">
+          <div className="logo-ball">
+            <svg viewBox="0 0 60 60" width="60" height="60">
+              <circle cx="30" cy="30" r="28" fill="#f97316" stroke="#c2530a" strokeWidth="1"/>
+              <path d="M30 2 Q30 30 30 58" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
+              <path d="M2 30 Q30 30 58 30" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
+              <path d="M8 12 Q20 22 30 30 Q40 38 52 48" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
+              <path d="M52 12 Q40 22 30 30 Q20 38 8 48" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
+            </svg>
           </div>
-          <button className="btn-new-game" onClick={() => setShowNewGame(true)}>+ Novo Jogo</button>
-          {games.length > 0 && (
-            <div className="recent-games">
-              <div className="recent-label">Jogos Salvos</div>
-              {games.slice(0,8).map(g => (
-                <div key={g.id} className="game-card" onClick={() => openGame(g)}>
-                  <div className="game-card-teams">
-                    <span>{g.teams[0].name}</span>
-                    <span className="game-card-score">{g.teams[0].score} — {g.teams[1].score}</span>
-                    <span>{g.teams[1].name}</span>
-                  </div>
-                  <div className="game-card-meta">
-                    <span>{g.date}</span>
-                    <span>{QUARTERS[g.quarter]}</span>
-                    <span>{g.log.length} eventos</span>
-                    <div className="export-btns" onClick={e => e.stopPropagation()}>
-                      <button className="export-btn" onClick={() => exportStatsCSV(g)}>Stats</button>
-                      <button className="export-btn green" onClick={() => exportShotsCSV(g)}>Arrem.</button>
-                    </div>
+          <div className="home-title">Basketball Scout</div>
+          <div className="home-sub">Análise ao vivo · Open Source · PWA</div>
+        </div>
+        <button className="btn-new-game" onClick={() => setShowNewGame(true)}>+ Novo Jogo</button>
+        {games.length > 0 && (
+          <div className="recent-games">
+            <div className="recent-label">Jogos Salvos</div>
+            {games.slice(0,8).map(g => (
+              <div key={g.id} className="game-card" onClick={() => openGame(g)}>
+                <div className="game-card-teams">
+                  <span>{g.teams[0].name}</span>
+                  <span className="game-card-score">{g.teams[0].score} — {g.teams[1].score}</span>
+                  <span>{g.teams[1].name}</span>
+                </div>
+                <div className="game-card-meta">
+                  <span>{g.date}</span><span>{QUARTERS[g.quarter]}</span>
+                  <span>{g.log.length} eventos</span>
+                  <div className="export-btns" onClick={e => e.stopPropagation()}>
+                    <button className="export-btn" onClick={() => exportStatsCSV(g)}>Stats</button>
+                    <button className="export-btn green" onClick={() => exportShotsCSV(g)}>Arrem.</button>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    );
-  }
+    </div>
+  );
 
   // ── GAME ──────────────────────────────────────────────────────────────────
-  const td = game.teams[activeTeam];
-  const sp = selectedPlayer !== null ? td.players[selectedPlayer] : null;
+  const td  = game.teams[activeTeam];
+  const sp  = selectedPlayer !== null ? td.players[selectedPlayer] : null;
   const activeShots = sp ? (sp.shots||[]) : td.players.flatMap(p => p.shots||[]);
+  const tfq = game.teamFouls?.[activeTeam]?.[game.quarter] || 0;
+  const inBonus = tfq >= TEAM_FOUL_BONUS;
 
   return (
     <div className="app">
       {toast && <div className="toast">{toast}</div>}
+
+      {/* Modal de assistência após cesto */}
+      {assistPending && (
+        <AssistModal
+          players={td.players}
+          scorerIdx={assistPending.scorerIdx}
+          onSelect={assistIdx => commitShot(
+            assistPending.scorerIdx, assistPending.xPct, assistPending.yPct,
+            assistPending.made, assistPending.three, assistIdx
+          )}
+          onNone={() => commitShot(
+            assistPending.scorerIdx, assistPending.xPct, assistPending.yPct,
+            assistPending.made, assistPending.three, null
+          )}
+          onCancel={() => setAssistPending(null)}
+        />
+      )}
+
+      {/* Modal de falta */}
+      {foulPending && sp && (
+        <FoulModal
+          player={sp}
+          teamFoulsInQuarter={tfq}
+          onType={commitFoul}
+          onCancel={() => setFoulPending(false)}
+        />
+      )}
 
       <header className="header">
         <div className="header-top">
@@ -495,29 +647,56 @@ export default function App() {
             <button className="export-btn-sm green" onClick={() => exportShotsCSV(game)}>Arrem.</button>
           </div>
         </div>
+
         <div className="scoreboard">
           <div className="team-score" data-active={activeTeam===0}
             onClick={() => { setActiveTeam(0); setSelectedPlayer(null); setShotMode(false); }}>
             <span className="team-name">{game.teams[0].name}</span>
             <span className="score">{game.teams[0].score}</span>
+            {/* Indicador de faltas do time no quarto */}
+            <div className="team-foul-dots">
+              {[1,2,3,4,5].map(n => (
+                <span key={n} className="foul-dot"
+                  data-filled={(game.teamFouls?.[0]?.[game.quarter]||0) >= n}
+                  data-bonus={n === TEAM_FOUL_BONUS}/>
+              ))}
+            </div>
           </div>
+
           <div className="center-info">
             <span className="quarter-label">{QUARTERS[game.quarter]}</span>
             <div className="clock">{fmtTime(game.clock)}</div>
             <div className="clock-btns">
               <button onClick={() => setRunning(r => !r)}>{running ? '⏸' : '▶'}</button>
-              <button onClick={() => setGame(g => ({...g, clock:600}))}>↺</button>
-              <button onClick={() => setGame(g => ({...g, quarter:Math.min(g.quarter+1,4), clock:600}))}>
-                ›{QUARTERS[Math.min(game.quarter+1,4)]}
+              <button onClick={() => setGame(g => ({...g, clock: game.quarter===4 ? 300 : 600}))}>↺</button>
+              <button className="next-q-btn" onClick={nextQuarter}
+                disabled={game.quarter >= 4}>
+                {game.quarter < 4 ? `›${QUARTERS[game.quarter+1]}` : 'Fim'}
               </button>
             </div>
           </div>
+
           <div className="team-score right" data-active={activeTeam===1}
             onClick={() => { setActiveTeam(1); setSelectedPlayer(null); setShotMode(false); }}>
             <span className="score">{game.teams[1].score}</span>
             <span className="team-name">{game.teams[1].name}</span>
+            <div className="team-foul-dots">
+              {[1,2,3,4,5].map(n => (
+                <span key={n} className="foul-dot"
+                  data-filled={(game.teamFouls?.[1]?.[game.quarter]||0) >= n}
+                  data-bonus={n === TEAM_FOUL_BONUS}/>
+              ))}
+            </div>
           </div>
         </div>
+
+        {/* Alerta de bonificação */}
+        {inBonus && (
+          <div className="bonus-bar">
+            BONIFICAÇÃO — {game.teams[activeTeam].name} ({tfq} faltas no {QUARTERS[game.quarter]})
+          </div>
+        )}
+
         <nav className="nav">
           {[['scout','Scout'],['stats','Stats'],['log','Log']].map(([v,l]) => (
             <button key={v} className="nav-btn" data-active={view===v}
@@ -543,11 +722,21 @@ export default function App() {
             <div className="players-grid">
               {td.players.map((p,pi) => (
                 <button key={pi} className="player-btn"
-                  data-active={selectedPlayer===pi} data-bench={!p.active}
+                  data-active={selectedPlayer===pi}
+                  data-bench={!p.active}
+                  data-trouble={p.fouls >= FOUL_TROUBLE && p.fouls < FOUL_DISQUALIFY}
+                  data-disq={p.fouls >= FOUL_DISQUALIFY}
                   onClick={() => setSelectedPlayer(pi)}>
                   <span className="pnum">#{p.number}</span>
                   <span className="pname">{p.name.split(' ')[0]}</span>
                   <span className="ppts">{p.pts}p</span>
+                  {p.fouls > 0 && (
+                    <span className="pfoul-badge"
+                      data-trouble={p.fouls >= FOUL_TROUBLE}
+                      data-disq={p.fouls >= FOUL_DISQUALIFY}>
+                      {p.fouls}f
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -558,23 +747,26 @@ export default function App() {
               <span className="sel-badge">#{sp.number} {sp.name}</span>
               <div className="sel-mini-stats">
                 {[['PTS',sp.pts],['AST',sp.ast],['REB',sp.reb+sp.oreb],
-                  ['STL',sp.stl],['TO',sp.to],['FL',sp.fouls]].map(([k,v]) => (
-                  <span key={k} className="mini-stat" data-warn={k==='TO'&&v>2} data-danger={k==='FL'&&v>=4}>
+                  ['STL',sp.stl],['TO',sp.to]].map(([k,v]) => (
+                  <span key={k} className="mini-stat" data-warn={k==='TO'&&v>2}>
                     <b>{v}</b>{k}
                   </span>
                 ))}
+                <span className="mini-stat"
+                  data-warn={sp.fouls >= FOUL_TROUBLE}
+                  data-danger={sp.fouls >= FOUL_DISQUALIFY}>
+                  <b>{sp.fouls}</b>FL
+                </span>
               </div>
             </div>
           )}
 
-          {/* Mapa de arremessos inline no scout */}
           <section className="court-section">
             <div className="court-section-header">
               <div className="section-label" style={{padding:'8px 0 0'}}>
-                Mapa de arremessos — {sp ? `#${sp.number} ${sp.name.split(' ')[0]}` : 'time inteiro'}
+                Mapa — {sp ? `#${sp.number} ${sp.name.split(' ')[0]}` : 'time inteiro'}
               </div>
-              <button
-                className={`shot-mode-btn ${shotMode ? 'active' : ''}`}
+              <button className={`shot-mode-btn ${shotMode ? 'active' : ''}`}
                 disabled={selectedPlayer===null}
                 onClick={() => setShotMode(m => !m)}>
                 {shotMode ? '✓ Marcando' : '+ Marcar'}
@@ -586,14 +778,10 @@ export default function App() {
             </div>
             {activeShots.length > 0 && (
               <div className="shot-summary">
-                <span className="shot-sum-item made">● {activeShots.filter(s=>s.made).length} convertidos</span>
+                <span className="shot-sum-item made">● {activeShots.filter(s=>s.made).length} certos</span>
                 <span className="shot-sum-item missed">✕ {activeShots.filter(s=>!s.made).length} errados</span>
-                <span className="shot-sum-item pct">
-                  {pct(activeShots.filter(s=>s.made).length, activeShots.length)} FG
-                </span>
-                <span className="shot-sum-item three">
-                  3pts: {pct(activeShots.filter(s=>s.made&&s.three).length, activeShots.filter(s=>s.three).length)}
-                </span>
+                <span className="shot-sum-item pct">{pct(activeShots.filter(s=>s.made).length, activeShots.length)} FG</span>
+                <span className="shot-sum-item three">3pts: {pct(activeShots.filter(s=>s.made&&s.three).length, activeShots.filter(s=>s.three).length)}</span>
               </div>
             )}
           </section>
@@ -630,6 +818,35 @@ export default function App() {
       {/* ── STATS ── */}
       {view==='stats' && (
         <main className="stats-view">
+          {/* Resumo de faltas por quarto */}
+          <div className="fouls-summary">
+            <div className="fouls-summary-title">Faltas por quarto</div>
+            <table className="fouls-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  {QUARTERS.slice(0, game.quarter+1).map(q => <th key={q}>{q}</th>)}
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {game.teams.map((t,ti) => {
+                  const tf = game.teamFouls?.[ti] || [0,0,0,0,0];
+                  const total = tf.reduce((a,b)=>a+b,0);
+                  return (
+                    <tr key={ti}>
+                      <td className="player-cell">{t.name}</td>
+                      {tf.slice(0, game.quarter+1).map((f,qi) => (
+                        <td key={qi} data-warn={f >= TEAM_FOUL_BONUS}>{f}</td>
+                      ))}
+                      <td className="pts-cell">{total}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
           {game.teams.map((team,ti) => {
             const tot = totals(team);
             const active = team.players.filter(p=>p.pts||p.ast||p.reb||p.oreb||p.stl||p.blk||p.to||p.fg2a||p.fg3a||p.fouls);
@@ -648,8 +865,11 @@ export default function App() {
                       </thead>
                       <tbody>
                         {active.map(p => (
-                          <tr key={p.id}>
-                            <td className="player-cell"><span className="num-badge">#{p.number}</span>{p.name}</td>
+                          <tr key={p.id} data-disq={p.fouls >= FOUL_DISQUALIFY}>
+                            <td className="player-cell">
+                              <span className="num-badge">#{p.number}</span>{p.name}
+                              {p.fouls >= FOUL_DISQUALIFY && <span className="disq-tag">DQ</span>}
+                            </td>
                             <td className="pts-cell">{p.pts}</td>
                             <td>{p.ast}</td><td>{p.reb+p.oreb}</td>
                             <td>{p.stl}</td><td>{p.blk}</td>
@@ -657,7 +877,7 @@ export default function App() {
                             <td>{pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)}</td>
                             <td>{pct(p.fg3m,p.fg3a)}</td>
                             <td>{pct(p.ftm,p.fta)}</td>
-                            <td data-warn={p.fouls>=4}>{p.fouls}</td>
+                            <td data-warn={p.fouls>=FOUL_TROUBLE} data-danger={p.fouls>=FOUL_DISQUALIFY}>{p.fouls}</td>
                           </tr>
                         ))}
                       </tbody>
