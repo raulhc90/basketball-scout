@@ -43,7 +43,6 @@ const newGame = (nameA='Time A', nameB='Time B', rosterA=DEFAULT_TEAM_A, rosterB
 });
 
 const MISC_ACTIONS = [
-  { id:'ast',  label:'Assist.',  pts:0, color:'#a855f7' },
   { id:'reb',  label:'Rebote',   pts:0, color:'#06b6d4' },
   { id:'oreb', label:'Reb.Of.',  pts:0, color:'#0891b2' },
   { id:'stl',  label:'Roubo',    pts:0, color:'#10b981' },
@@ -103,12 +102,12 @@ function isThreePointer(xPct, yPct) {
 }
 
 // ─── Quadra SVG ──────────────────────────────────────────────────────────────
-function BasketballCourt({ shots=[], onCourtClick, shotMode=false }) {
+function BasketballCourt({ shots=[], onCourtClick, hasPlayer=false }) {
   const W=600, H=320, cy=160, cx1=57, cx2=543;
   const gc = s => s.made ? 'rgba(34,197,94,0.9)' : 'rgba(239,68,68,0.9)';
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="court-svg"
-      style={{cursor: shotMode ? 'crosshair' : 'default'}} onClick={onCourtClick}>
+      style={{cursor: hasPlayer ? 'crosshair' : 'default'}} onClick={onCourtClick}>
       <rect x="0" y="0" width={W} height={H} fill="#1a1f2a"/>
       <g stroke="#3a4560" strokeWidth="1.2" fill="none">
         <rect x="2" y="2" width={W-4} height={H-4} rx="2"/>
@@ -218,11 +217,14 @@ function FreeThrowModal({ players, onSelect, onCancel }) {
 }
 
 // ─── Free Throw Result Modal ──────────────────────────────────────────────────
-function FreeThrowResultModal({ player, onMade, onMissed, onCancel }) {
+function FreeThrowResultModal({ player, attempt, totalAttempts, onMade, onMissed, onCancel }) {
   return (
     <div className="confirm-overlay">
       <div className="confirm-modal">
-        <div className="confirm-title">Lance Livre — #{player.number} {player.name.split(' ')[0]}</div>
+        <div className="confirm-title">
+          Lance Livre {attempt}/{totalAttempts}
+        </div>
+        <div className="ft-player-label">#{player.number} {player.name.split(' ')[0]}</div>
         <div className="confirm-btns">
           <button className="confirm-btn made" onClick={onMade}>Convertido +1</button>
           <button className="confirm-btn missed" onClick={onMissed}>Errado</button>
@@ -364,7 +366,7 @@ export default function App() {
   const [view, setView]       = useState('scout');
   const [toast, setToast]     = useState(null);
   const [showNewGame, setShowNewGame] = useState(false);
-  const [shotMode, setShotMode]       = useState(false);
+  // shotMode removido — quadra sempre ativa quando atleta selecionado
 
   // Modal states
   // confirmShot: { xPct, yPct, three } | null
@@ -406,13 +408,11 @@ export default function App() {
   const startGame = (nameA, nameB, rosterA, rosterB) => {
     setGame(newGame(nameA, nameB, rosterA, rosterB));
     setShowNewGame(false); setScreen('game'); setView('scout');
-    setActiveTeam(0); setSelectedPlayer(null); setRunning(false); setShotMode(false);
-  };
+    setActiveTeam(0); setSelectedPlayer(null); setRunning(false); };
 
   const openGame = g => {
     setGame(g); setScreen('game'); setView('scout');
-    setActiveTeam(0); setSelectedPlayer(null); setRunning(false); setShotMode(false);
-  };
+    setActiveTeam(0); setSelectedPlayer(null); setRunning(false); };
 
   // Avança quarto — zera faltas coletivas (exceto OT que continua)
   const nextQuarter = useCallback(() => {
@@ -504,12 +504,13 @@ export default function App() {
   }, [selectedPlayer, activeTeam, game]);
 
   // ── Lance Livre ────────────────────────────────────────────────────────────
-  const commitFT = useCallback((playerIdx, made) => {
+  // ftTeamIdx: time que ARREMESSA (adversário de quem fez a falta)
+  const commitFT = useCallback((ftTeamIdx, playerIdx, made) => {
     if (!game) return;
-    const pl = game.teams[activeTeam].players[playerIdx];
+    const pl = game.teams[ftTeamIdx].players[playerIdx];
     setGame(g => {
       const teams = g.teams.map((t, ti) => {
-        if (ti !== activeTeam) return t;
+        if (ti !== ftTeamIdx) return t;
         return {
           ...t,
           score: t.score + (made ? 1 : 0),
@@ -520,13 +521,14 @@ export default function App() {
         };
       });
       const entry = { id: Date.now(), q: QUARTERS[g.quarter], time: fmtTime(g.clock),
-        team: g.teams[activeTeam].name, player: `#${pl.number} ${pl.name.split(' ')[0]}`,
+        team: g.teams[ftTeamIdx].name, player: `#${pl.number} ${pl.name.split(' ')[0]}`,
         action: made ? 'LL certo' : 'LL erro', pts: made?1:0, color: made?'#f59e0b':'#475569' };
       return { ...g, teams, log: [entry, ...g.log] };
     });
     if (made) showToast(`+1 LL — ${pl.name.split(' ')[0]}`);
-    setFtModal(null); setFtPlayer(null);
-  }, [activeTeam, game]);
+    // Não fecha modal aqui — o controle de abrir/fechar fica no JSX (attempt counter)
+    // O modal fechará quando attempt === total (controlado pelo onMade/onMissed no JSX)
+  }, [game]);
 
   // ── Registra arremesso com assistência ────────────────────────────────────
   const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx) => {
@@ -571,19 +573,20 @@ export default function App() {
       return { ...g, teams, log: [...entries, ...g.log] };
     });
     if (made) showToast(`+${pts}${assistIdx !== null ? ' + assist' : ''}`);
-    setAssistPending(null); setShotMode(false);
-  }, [activeTeam]);
+    setAssistPending(null); }, [activeTeam]);
 
   // ── Clique na quadra ───────────────────────────────────────────────────────
+  // Sempre ativo quando há atleta selecionado — não precisa clicar em "+ Marcar"
   const handleCourtClick = useCallback(e => {
-    if (!shotMode || selectedPlayer === null || !courtRef.current) return;
+    if (selectedPlayer === null || !courtRef.current) return;
+    // Não registra se há modal aberto
+    if (confirmShot || assistPending || foulPending || ftModal || subModal) return;
     const rect = courtRef.current.getBoundingClientRect();
     const xPct = (e.clientX - rect.left) / rect.width * 100;
     const yPct = (e.clientY - rect.top)  / rect.height * 100;
     const three = isThreePointer(xPct, yPct);
-    // Abre confirmação in-app
     setConfirmShot({ xPct, yPct, three });
-  }, [shotMode, selectedPlayer]);
+  }, [selectedPlayer, confirmShot, assistPending, foulPending, ftModal, subModal]);
 
   // ── Ações miscellâneas ─────────────────────────────────────────────────────
   const applyMisc = useCallback(action => {
@@ -607,8 +610,9 @@ export default function App() {
 
   const applyFT = useCallback(action => {
     if (selectedPlayer === null) { showToast('Selecione um atleta'); return; }
-    commitFT(selectedPlayer, action.id === 'ftm');
-  }, [selectedPlayer, commitFT]);
+    // LL manual: vai para o time do atleta selecionado (sem falta coletiva)
+    commitFT(activeTeam, selectedPlayer, action.id === 'ftm');
+  }, [selectedPlayer, activeTeam, commitFT]);
 
   // ─── HOME ──────────────────────────────────────────────────────────────────
   if (screen === 'home') return (
@@ -691,18 +695,40 @@ export default function App() {
       {foulPending && sp && (
         <FoulModal player={sp} teamFoulsInQuarter={tfq} onType={commitFoul} onCancel={() => setFoulPending(false)}/>
       )}
-      {ftModal === 'pick_player' && (
-        <FreeThrowModal
-          players={td.players}
-          onSelect={idx => { setFtPlayer(idx); setFtModal('result'); }}
-          onCancel={() => setFtModal(null)}
-        />
-      )}
+      {ftModal === 'pick_player' && (() => {
+        // LL vai para o ADVERSÁRIO de quem fez a falta
+        const ftTeamIdx = 1 - activeTeam;
+        const ftPlayers = game.teams[ftTeamIdx].players;
+        return (
+          <FreeThrowModal
+            players={ftPlayers}
+            teamName={game.teams[ftTeamIdx].name}
+            onSelect={idx => { setFtPlayer({ teamIdx: ftTeamIdx, playerIdx: idx, attempt: 1, total: 2 }); setFtModal('result'); }}
+            onCancel={() => setFtModal(null)}
+          />
+        );
+      })()}
       {ftModal === 'result' && ftPlayer !== null && (
         <FreeThrowResultModal
-          player={td.players[ftPlayer]}
-          onMade={() => commitFT(ftPlayer, true)}
-          onMissed={() => commitFT(ftPlayer, false)}
+          player={game.teams[ftPlayer.teamIdx].players[ftPlayer.playerIdx]}
+          attempt={ftPlayer.attempt}
+          totalAttempts={ftPlayer.total}
+          onMade={() => {
+            commitFT(ftPlayer.teamIdx, ftPlayer.playerIdx, true);
+            if (ftPlayer.attempt < ftPlayer.total) {
+              setFtPlayer(prev => ({ ...prev, attempt: prev.attempt + 1 }));
+            } else {
+              setFtModal(null); setFtPlayer(null);
+            }
+          }}
+          onMissed={() => {
+            commitFT(ftPlayer.teamIdx, ftPlayer.playerIdx, false);
+            if (ftPlayer.attempt < ftPlayer.total) {
+              setFtPlayer(prev => ({ ...prev, attempt: prev.attempt + 1 }));
+            } else {
+              setFtModal(null); setFtPlayer(null);
+            }
+          }}
           onCancel={() => { setFtModal(null); setFtPlayer(null); }}
         />
       )}
@@ -731,7 +757,7 @@ export default function App() {
 
         <div className="scoreboard">
           <div className="team-score" data-active={activeTeam===0}
-            onClick={() => { setActiveTeam(0); setSelectedPlayer(null); setShotMode(false); }}>
+            onClick={() => { setActiveTeam(0); setSelectedPlayer(null); }}>
             <span className="team-name">{game.teams[0].name}</span>
             <span className="score">{game.teams[0].score}</span>
             <div className="team-foul-dots">
@@ -756,7 +782,7 @@ export default function App() {
           </div>
 
           <div className="team-score right" data-active={activeTeam===1}
-            onClick={() => { setActiveTeam(1); setSelectedPlayer(null); setShotMode(false); }}>
+            onClick={() => { setActiveTeam(1); setSelectedPlayer(null); }}>
             <span className="score">{game.teams[1].score}</span>
             <span className="team-name">{game.teams[1].name}</span>
             <div className="team-foul-dots">
@@ -778,7 +804,7 @@ export default function App() {
         <nav className="nav">
           {[['scout','Scout'],['stats','Stats'],['log','Log']].map(([v,l])=>(
             <button key={v} className="nav-btn" data-active={view===v}
-              onClick={() => { setView(v); if(v!=='scout') setShotMode(false); }}>{l}</button>
+              onClick={() => { setView(v); }}>{l}</button>
           ))}
         </nav>
       </header>
@@ -789,7 +815,7 @@ export default function App() {
           <div className="team-tabs">
             {game.teams.map((t,ti)=>(
               <button key={ti} className="team-tab" data-active={activeTeam===ti}
-                onClick={() => { setActiveTeam(ti); setSelectedPlayer(null); setShotMode(false); }}>
+                onClick={() => { setActiveTeam(ti); setSelectedPlayer(null); }}>
                 {t.name} <span className="tab-score">{t.score}</span>
               </button>
             ))}
@@ -812,15 +838,15 @@ export default function App() {
                   data-active={selectedPlayer===pi}
                   data-bench={!p.active}
                   data-trouble={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY}
-                  data-disq={p.fouls>=FOUL_DISQUALIFY}
+                  data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}
                   onClick={() => setSelectedPlayer(pi)}>
                   <span className="pnum">#{p.number}</span>
                   <span className="pname">{p.name.split(' ')[0]}</span>
                   <span className="ppts">{p.pts}p</span>
                   {p.fouls>0 && (
                     <span className="pfoul-badge"
-                      data-trouble={p.fouls>=FOUL_TROUBLE}
-                      data-disq={p.fouls>=FOUL_DISQUALIFY}>
+                      data-trouble={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY && (p.techFouls||0)<TECH_DISQUALIFY}
+                      data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}>
                       {p.fouls}f{p.techFouls>0?`+${p.techFouls}t`:''}
                     </span>
                   )}
@@ -843,22 +869,20 @@ export default function App() {
             </div>
           )}
 
-          {/* Mapa com instrução contextual */}
+          {/* Mapa — clique direto quando atleta selecionado */}
           <section className="court-section">
             <div className="court-section-header">
               <div className="section-label" style={{padding:'8px 0 0'}}>
-                {shotMode
-                  ? `Toque na quadra — ${sp ? `#${sp.number} ${sp.name.split(' ')[0]}` : ''}`
-                  : `Mapa — ${sp ? `#${sp.number} ${sp.name.split(' ')[0]}` : 'time inteiro'}`}
+                {selectedPlayer !== null
+                  ? `Toque na quadra — #${sp?.number} ${sp?.name.split(' ')[0]}`
+                  : `Mapa — selecione um atleta para marcar`}
               </div>
-              <button className={`shot-mode-btn ${shotMode?'active':''}`}
-                disabled={selectedPlayer===null}
-                onClick={() => setShotMode(m=>!m)}>
-                {shotMode ? '✓ Marcando' : '+ Marcar'}
-              </button>
+              {selectedPlayer !== null && (
+                <div className="court-active-badge">● ao vivo</div>
+              )}
             </div>
             <div ref={courtRef} className="court-container">
-              <BasketballCourt shots={activeShots} onCourtClick={handleCourtClick} shotMode={shotMode}/>
+              <BasketballCourt shots={activeShots} onCourtClick={handleCourtClick} hasPlayer={selectedPlayer !== null}/>
             </div>
             {activeShots.length>0 && (
               <div className="shot-summary">
@@ -936,10 +960,10 @@ export default function App() {
                       <thead><tr><th>Atleta</th><th>PTS</th><th>AST</th><th>REB</th><th>STL</th><th>BLK</th><th>TO</th><th>FG%</th><th>3P%</th><th>LL%</th><th>FL</th></tr></thead>
                       <tbody>
                         {active.map(p=>(
-                          <tr key={p.id} data-disq={p.fouls>=FOUL_DISQUALIFY}>
+                          <tr key={p.id} data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}>
                             <td className="player-cell">
                               <span className="num-badge">#{p.number}</span>{p.name}
-                              {p.fouls>=FOUL_DISQUALIFY && <span className="disq-tag">DQ</span>}
+                              {(p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY) && <span className="disq-tag">DQ</span>}
                             </td>
                             <td className="pts-cell">{p.pts}</td>
                             <td>{p.ast}</td><td>{p.reb+p.oreb}</td>
@@ -948,7 +972,7 @@ export default function App() {
                             <td>{pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)}</td>
                             <td>{pct(p.fg3m,p.fg3a)}</td>
                             <td>{pct(p.ftm,p.fta)}</td>
-                            <td data-warn={p.fouls>=FOUL_TROUBLE} data-danger={p.fouls>=FOUL_DISQUALIFY}>{p.fouls}{p.techFouls>0?`+${p.techFouls}t`:''}</td>
+                            <td data-warn={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY} data-danger={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}>{p.fouls}{p.techFouls>0?`+${p.techFouls}t`:''}</td>
                           </tr>
                         ))}
                       </tbody>

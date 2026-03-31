@@ -803,3 +803,24 @@ tr[data-disq=true] { opacity: .6; }
 .fouls-table td[data-warn=true] { color:var(--red); font-weight:800; }
 .disq-tag { font-family:var(--fd); font-size:10px; font-weight:800; background:rgba(239,68,68,.2); color:var(--red); padding:1px 5px; border-radius:3px; margin-left:5px; }
 tr[data-disq=true] { opacity:.6; }
+
+/* ── Court active badge ── */
+.court-active-badge {
+  font-family: var(--fd);
+  font-size: 11px; font-weight: 700;
+  color: var(--green);
+  letter-spacing: .06em;
+  padding: 4px 8px;
+  background: rgba(34,197,94,.1);
+  border: 1px solid rgba(34,197,94,.3);
+  border-radius: 20px;
+  margin-top: 6px;
+}
+
+/* ── FT player label ── */
+.ft-player-label {
+  font-family: var(--fd);
+  font-size: 16px; font-weight: 700;
+  color: var(--acc2);
+  margin-top: -6px;
+}
