@@ -88,60 +88,158 @@ function exportShotsCSV(game) {
 }
 
 // ─── isThreePointer ──────────────────────────────────────────────────────────
+// SVG 600x320 — NBB oficial
+// Cesta esq: cx1=34, cy=160 | Cesta dir: cx2=566, cy=160
+// Garrafão: ftX1=124 (esq), ftX2=476 (dir)
+// Linha 3pts: latY1=19 (topo), latY2=301 (base) — 90cm das laterais
+// Arco 3pts: raio arcR=145 | arcX1=67, arcX2=533 (onde arco toca latY)
+//
+// Regra: ponto é 3pts se:
+//   1) py < latY1 ou py > latY2 (acima/abaixo da linha lateral — corner)
+//   2) px <= arcX1 (lado esq) ou px >= arcX2 (lado dir) — corredor lateral
+//   3) distância da cesta mais próxima > arcR
 function isThreePointer(xPct, yPct) {
-  const px = xPct * 6, py = yPct * 3.2, cy = 16;
-  const dL = Math.sqrt((px-5.7)**2 + (py-cy)**2);
-  const dR = Math.sqrt((px-54.3)**2 + (py-cy)**2);
-  if (dL < dR) {
-    if (py < cy-7.5 || py > cy+7.5) return true;
-    return px >= 9.5 && dL > 14.1;
+  const W = 600, H = 320, cy = 160;
+  const cx1 = 34,  cx2 = 566;
+  const arcR = 145;
+  const arcX1 = 67, arcX2 = 533;
+  const latY1 = 19, latY2 = 301;
+
+  const px = xPct * W / 100;
+  const py = yPct * H / 100;
+
+  // Canto/fundo (corner three)
+  if (py < latY1 || py > latY2) return true;
+
+  const dL = Math.sqrt((px - cx1) ** 2 + (py - cy) ** 2);
+  const dR = Math.sqrt((px - cx2) ** 2 + (py - cy) ** 2);
+
+  if (dL <= dR) {
+    // Lado esquerdo — corredor lateral ou além do arco
+    if (px <= arcX1) return true;
+    return dL > arcR;
   } else {
-    if (py < cy-7.5 || py > cy+7.5) return true;
-    return px <= 50.5 && dR > 14.1;
+    // Lado direito
+    if (px >= arcX2) return true;
+    return dR > arcR;
   }
 }
 
 // ─── Quadra SVG ──────────────────────────────────────────────────────────────
+// Medidas NBB oficiais — SVG 600x320
+// sx=0.2143px/cm, sy=0.2133px/cm
+// Cesta: (34,160) esq | (566,160) dir
+// Garrafão: 124x104px | LL: x=124 (esq), x=476 (dir) | Raio LL: 39px
+// Linha 3pts lateral: y=19 (topo), y=301 (base)
+// Arco 3pts: raio=145px, início x=67 (esq), x=533 (dir)
+// Área restrita: raio=23px
 function BasketballCourt({ shots=[], onCourtClick, hasPlayer=false }) {
-  const W=600, H=320, cy=160, cx1=57, cx2=543;
-  const gc = s => s.made ? 'rgba(34,197,94,0.9)' : 'rgba(239,68,68,0.9)';
+  const W=600, H=320, cy=160;
+  const cx1=34,  cx2=566;   // cestas
+  const ftX1=124, ftX2=476; // linha de LL
+  const ftR=39;              // raio semicírculo LL
+  const arcR=145;            // raio arco 3pts
+  const latY1=19, latY2=301; // linha lateral de 3pts
+  const arcX1=67, arcX2=533; // x onde arco toca y=latY1/latY2
+  const paintH=52;           // metade altura garrafão (cy±52)
+
+  // Zona de 3pts: corners + área além do arco
+  // Esq corner topo: retângulo entre borda e início do arco, acima da linha lateral
+  const cornerTL = `M 2 2 L ${arcX1} 2 L ${arcX1} ${latY1} L 2 ${latY1} Z`;
+  const cornerBL = `M 2 ${latY2} L ${arcX1} ${latY2} L ${arcX1} ${H-2} L 2 ${H-2} Z`;
+  // Esq corredor: entre borda e arcX1, entre latY1 e latY2
+  const corridorL = `M 2 ${latY1} L ${arcX1} ${latY1} L ${arcX1} ${latY2} L 2 ${latY2} Z`;
+  // Esq além do arco: entre arcX1 e W/2, além do arco
+  // Representado como: arco vai de (arcX1,latY1) até (arcX1,latY2) sweep=1 (grande arco)
+  // A zona além fica entre o arco e W/2
+  const beyondL = `M ${arcX1} ${latY1} A ${arcR} ${arcR} 0 0 1 ${arcX1} ${latY2} L ${W/2} ${latY2} L ${W/2} ${latY1} Z`;
+
+  // Dir mirrors
+  const cornerTR = `M ${W-2} 2 L ${arcX2} 2 L ${arcX2} ${latY1} L ${W-2} ${latY1} Z`;
+  const cornerBR = `M ${W-2} ${latY2} L ${arcX2} ${latY2} L ${arcX2} ${H-2} L ${W-2} ${H-2} Z`;
+  const corridorR = `M ${arcX2} ${latY1} L ${W-2} ${latY1} L ${W-2} ${latY2} L ${arcX2} ${latY2} Z`;
+  const beyondR = `M ${arcX2} ${latY1} A ${arcR} ${arcR} 0 0 0 ${arcX2} ${latY2} L ${W/2} ${latY2} L ${W/2} ${latY1} Z`;
+
+  // Combined zones
+  const z3L = cornerTL + ' ' + cornerBL + ' ' + corridorL + ' ' + beyondL;
+  const z3R = cornerTR + ' ' + cornerBR + ' ' + corridorR + ' ' + beyondR;
+
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="court-svg"
-      style={{cursor: hasPlayer ? 'crosshair' : 'default'}} onClick={onCourtClick}>
+      style={{cursor: hasPlayer ? 'crosshair' : 'default'}}
+      onClick={onCourtClick}
+      data-court="true">
+
+      {/* Fundo */}
       <rect x="0" y="0" width={W} height={H} fill="#1a1f2a"/>
-      <g stroke="#3a4560" strokeWidth="1.2" fill="none">
+
+      {/* Zona 3pts — azul sutil */}
+      <path d={z3L} fill="rgba(59,130,246,0.07)"/>
+      <path d={z3R} fill="rgba(59,130,246,0.07)"/>
+
+      {/* Garrafão — verde sutil */}
+      <rect x="2"       y={cy-paintH} width={ftX1}       height={paintH*2} fill="rgba(34,197,94,0.07)"/>
+      <rect x={ftX2}    y={cy-paintH} width={W-2-ftX2}   height={paintH*2} fill="rgba(34,197,94,0.07)"/>
+
+      {/* Linhas estruturais */}
+      <g stroke="#4a5570" strokeWidth="1" fill="none">
         <rect x="2" y="2" width={W-4} height={H-4} rx="2"/>
         <line x1={W/2} y1="2" x2={W/2} y2={H-2}/>
         <circle cx={W/2} cy={cy} r="38"/>
-        <rect x="2" y={cy-51} width="120" height="103"/>
-        <path d={`M 122 ${cy-51} A 51 51 0 0 1 122 ${cy+51}`} strokeDasharray="4 3"/>
-        <rect x="478" y={cy-51} width="120" height="103"/>
-        <path d={`M 478 ${cy-51} A 51 51 0 0 0 478 ${cy+51}`} strokeDasharray="4 3"/>
-        <line x1="2"   y1={cy-75} x2="95" y2={cy-75}/>
-        <line x1="2"   y1={cy+75} x2="95" y2={cy+75}/>
-        <path d={`M 95 ${cy-75} A 141 141 0 0 1 95 ${cy+75}`}/>
-        <line x1="505" y1={cy-75} x2={W-2} y2={cy-75}/>
-        <line x1="505" y1={cy+75} x2={W-2} y2={cy+75}/>
-        <path d={`M 505 ${cy-75} A 141 141 0 0 0 505 ${cy+75}`}/>
-        <path d={`M ${cx1} ${cy-26} A 26 26 0 0 1 ${cx1} ${cy+26}`}/>
-        <path d={`M ${cx2} ${cy-26} A 26 26 0 0 0 ${cx2} ${cy+26}`}/>
+
+        {/* Garrafão esq */}
+        <rect x="2" y={cy-paintH} width={ftX1} height={paintH*2}/>
+        <path d={`M ${ftX1} ${cy-paintH} A ${ftR} ${ftR} 0 0 1 ${ftX1} ${cy+paintH}`} strokeDasharray="5 3"/>
+
+        {/* Garrafão dir */}
+        <rect x={ftX2} y={cy-paintH} width={W-2-ftX2} height={paintH*2}/>
+        <path d={`M ${ftX2} ${cy-paintH} A ${ftR} ${ftR} 0 0 0 ${ftX2} ${cy+paintH}`} strokeDasharray="5 3"/>
+
+        {/* Área restrita */}
+        <path d={`M ${cx1} ${cy-23} A 23 23 0 0 1 ${cx1} ${cy+23}`}/>
+        <path d={`M ${cx2} ${cy-23} A 23 23 0 0 0 ${cx2} ${cy+23}`}/>
       </g>
-      <g stroke="#f97316" strokeWidth="1.5" fill="none">
-        <circle cx={cx1} cy={cy} r="5"/><line x1="2" y1={cy} x2={cx1-5} y2={cy}/>
-        <circle cx={cx2} cy={cy} r="5"/><line x1={W-2} y1={cy} x2={cx2+5} y2={cy}/>
+
+      {/* Linha de 3pts — destacada */}
+      <g stroke="#5a6a95" strokeWidth="1.6" fill="none" strokeLinecap="round">
+        {/* Esq: lateral topo + arco + lateral base */}
+        <line x1="2"    y1={latY1} x2={arcX1}   y2={latY1}/>
+        <path d={`M ${arcX1} ${latY1} A ${arcR} ${arcR} 0 0 1 ${arcX1} ${latY2}`}/>
+        <line x1={arcX1} y1={latY2} x2="2"     y2={latY2}/>
+        {/* Dir: lateral topo + arco + lateral base */}
+        <line x1={W-2}  y1={latY1} x2={arcX2}   y2={latY1}/>
+        <path d={`M ${arcX2} ${latY1} A ${arcR} ${arcR} 0 0 0 ${arcX2} ${latY2}`}/>
+        <line x1={arcX2} y1={latY2} x2={W-2}   y2={latY2}/>
       </g>
-      <g fill="#3a4560" fontSize="8" fontFamily="sans-serif" textAnchor="middle">
-        <text x="48" y="20">3pts</text><text x={W/2} y="16">3pts topo</text>
-        <text x="552" y="20">3pts</text>
-        <text x="62" y={cy+4}>Garrafão</text><text x="538" y={cy+4}>Garrafão</text>
+
+      {/* Cestas */}
+      <g stroke="#f97316" strokeWidth="1.8" fill="none">
+        <circle cx={cx1} cy={cy} r="5.5"/>
+        <line x1="2"   y1={cy} x2={cx1-5} y2={cy}/>
+        <circle cx={cx2} cy={cy} r="5.5"/>
+        <line x1={W-2} y1={cy} x2={cx2+5} y2={cy}/>
       </g>
+
+      {/* Labels de zona */}
+      <g fill="#4a5570" fontSize="8" fontFamily="sans-serif" textAnchor="middle">
+        <text x="48"   y="18">3pts</text>
+        <text x={W/2}  y="14">3pts topo</text>
+        <text x="552"  y="18">3pts</text>
+        <text x="62"   y={cy+4}>Garrafão</text>
+        <text x="538"  y={cy+4}>Garrafão</text>
+        <text x="220"  y={cy-10} fontSize="7">2pts médio</text>
+        <text x="380"  y={cy-10} fontSize="7">2pts médio</text>
+      </g>
+
+      {/* Shots */}
       {shots.map((s,i) => {
         const px=s.x*W/100, py=s.y*H/100;
+        const color = s.made ? (s.three ? '#3b82f6' : '#22c55e') : '#ef4444';
         return s.made
-          ? <circle key={i} cx={px} cy={py} r="5" fill={gc(s)} stroke="#fff" strokeWidth="0.5" opacity="0.9"/>
-          : <g key={i} opacity="0.9">
-              <line x1={px-4} y1={py-4} x2={px+4} y2={py+4} stroke={gc(s)} strokeWidth="1.8" strokeLinecap="round"/>
-              <line x1={px+4} y1={py-4} x2={px-4} y2={py+4} stroke={gc(s)} strokeWidth="1.8" strokeLinecap="round"/>
+          ? <circle key={i} cx={px} cy={py} r="5.5" fill={color} stroke="#fff" strokeWidth="0.5" opacity="0.92"/>
+          : <g key={i} opacity="0.85">
+              <line x1={px-4.5} y1={py-4.5} x2={px+4.5} y2={py+4.5} stroke={color} strokeWidth="2" strokeLinecap="round"/>
+              <line x1={px+4.5} y1={py-4.5} x2={px-4.5} y2={py+4.5} stroke={color} strokeWidth="2" strokeLinecap="round"/>
             </g>;
       })}
     </svg>
@@ -578,11 +676,12 @@ export default function App() {
   // ── Clique na quadra ───────────────────────────────────────────────────────
   // Sempre ativo quando há atleta selecionado — não precisa clicar em "+ Marcar"
   const handleCourtClick = useCallback(e => {
-    if (selectedPlayer === null || !courtRef.current) return;
-    // Não registra se há modal aberto
+    if (selectedPlayer === null) return;
     if (confirmShot || assistPending || foulPending || ftModal || subModal) return;
-    const rect = courtRef.current.getBoundingClientRect();
-    const xPct = (e.clientX - rect.left) / rect.width * 100;
+    // Usar e.currentTarget (o SVG) para coordenadas precisas independente do wrapper
+    const svgEl = e.currentTarget;
+    const rect = svgEl.getBoundingClientRect();
+    const xPct = (e.clientX - rect.left) / rect.width  * 100;
     const yPct = (e.clientY - rect.top)  / rect.height * 100;
     const three = isThreePointer(xPct, yPct);
     setConfirmShot({ xPct, yPct, three });
