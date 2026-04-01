@@ -12,8 +12,16 @@ const INITIAL_PLAYER = () => ({
   pts: 0, ast: 0, reb: 0, oreb: 0, stl: 0, blk: 0, to: 0,
   fg2a: 0, fg2m: 0, fg3a: 0, fg3m: 0, fta: 0, ftm: 0,
   fouls: 0, techFouls: 0,
+  plusMinus: 0,
   shots: [],
 });
+
+// PIR = PTS + REB + AST + STL + BLK + (FGM - FGA) + (FTM - FTA) - TO - FOULS
+const calcPIR = p =>
+  p.pts + (p.reb + p.oreb) + p.ast + p.stl + p.blk
+  + (p.fg2m + p.fg3m - p.fg2a - p.fg3a)
+  + (p.ftm - p.fta)
+  - p.to - p.fouls;
 
 const DEFAULT_TEAM_A = [
   {number:'04',name:'A. Silva'},{number:'07',name:'B. Costa'},{number:'10',name:'C. Lima'},
@@ -72,11 +80,14 @@ function dl(content, filename) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = filename; a.click();
 }
 function exportStatsCSV(game) {
-  const lines = ['Atleta,Time,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG3M,FG3A,FTM,FTA,FG%,3P%,LL%,FALTAS'];
+  const lines = ['Atleta,Time,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG3M,FG3A,FTM,FTA,FG%,3P%,LL%,FALTAS,+/-,PIR'];
   game.teams.forEach(t => {
-    t.players.forEach(p => lines.push(`"#${p.number} ${p.name}","${t.name}",${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${p.fg3m},${p.fg3a},${p.ftm},${p.fta},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${pct(p.fg3m,p.fg3a)},${pct(p.ftm,p.fta)},${p.fouls}`));
+    t.players.forEach(p => {
+      const pm = (p.plusMinus||0) >= 0 ? `+${p.plusMinus||0}` : `${p.plusMinus||0}`;
+      lines.push(`"#${p.number} ${p.name}","${t.name}",${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${p.fg3m},${p.fg3a},${p.ftm},${p.fta},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${pct(p.fg3m,p.fg3a)},${pct(p.ftm,p.fta)},${p.fouls},${pm},${calcPIR(p)}`);
+    });
     const tot = totals(t);
-    lines.push(`"TOTAL","${t.name}",${tot.pts},${tot.ast},${tot.reb},${tot.oreb},${tot.stl},${tot.blk},${tot.to},${tot.fg2m},${tot.fg2a},${tot.fg3m},${tot.fg3a},${tot.ftm},${tot.fta},${pct(tot.fg2m+tot.fg3m,tot.fg2a+tot.fg3a)},${pct(tot.fg3m,tot.fg3a)},${pct(tot.ftm,tot.fta)},${tot.fouls}`);
+    lines.push(`"TOTAL","${t.name}",${tot.pts},${tot.ast},${tot.reb},${tot.oreb},${tot.stl},${tot.blk},${tot.to},${tot.fg2m},${tot.fg2a},${tot.fg3m},${tot.fg3a},${tot.ftm},${tot.fta},${pct(tot.fg2m+tot.fg3m,tot.fg2a+tot.fg3a)},${pct(tot.fg3m,tot.fg3a)},${pct(tot.ftm,tot.fta)},${tot.fouls},,`);
   });
   dl(lines.join('\n'), `stats_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
@@ -133,7 +144,8 @@ function isThreePointer(xPct, yPct) {
 // Linha 3pts lateral: y=19 (topo), y=301 (base)
 // Arco 3pts: raio=145px, início x=67 (esq), x=533 (dir)
 // Área restrita: raio=23px
-function BasketballCourt({ shots=[], onCourtClick, hasPlayer=false }) {
+function BasketballCourt({ shots=[], onCourtClick, hasPlayer=false, attackDir='right' }) {
+  // attackDir: 'right' = time ataca para direita (cesta dir), 'left' = ataca para esquerda (cesta esq)
   const W=600, H=320, cy=160;
   const cx1=34,  cx2=566;   // cestas
   const ftX1=124, ftX2=476; // linha de LL
@@ -231,6 +243,21 @@ function BasketballCourt({ shots=[], onCourtClick, hasPlayer=false }) {
         <text x="380"  y={cy-10} fontSize="7">2pts médio</text>
       </g>
 
+      {/* Seta de ataque */}
+      {attackDir === 'right' ? (
+        <g stroke="#f97316" strokeWidth="2" fill="none" opacity="0.7">
+          <line x1="220" y1={cy} x2="340" y2={cy} strokeLinecap="round"/>
+          <polyline points={`325,${cy-10} 340,${cy} 325,${cy+10}`} strokeLinejoin="round"/>
+          <text x="280" y={cy-14} fill="#f97316" fontSize="9" fontFamily="sans-serif" textAnchor="middle" stroke="none">ataque</text>
+        </g>
+      ) : (
+        <g stroke="#f97316" strokeWidth="2" fill="none" opacity="0.7">
+          <line x1="380" y1={cy} x2="260" y2={cy} strokeLinecap="round"/>
+          <polyline points={`275,${cy-10} 260,${cy} 275,${cy+10}`} strokeLinejoin="round"/>
+          <text x="320" y={cy-14} fill="#f97316" fontSize="9" fontFamily="sans-serif" textAnchor="middle" stroke="none">ataque</text>
+        </g>
+      )}
+
       {/* Shots */}
       {shots.map((s,i) => {
         const px=s.x*W/100, py=s.y*H/100;
@@ -264,6 +291,10 @@ function ConfirmShotModal({ three, onMade, onMissed, onCancel }) {
 
 // ─── Assist Modal ─────────────────────────────────────────────────────────────
 function AssistModal({ players, scorerIdx, onSelect, onNone, onCancel }) {
+  // Apenas atletas em quadra, exceto o próprio pontuador
+  const eligible = players
+    .map((p, i) => ({ p, i }))
+    .filter(({ p, i }) => i !== scorerIdx && p.active && p.fouls < FOUL_DISQUALIFY && (p.techFouls||0) < TECH_DISQUALIFY);
   return (
     <div className="assist-overlay">
       <div className="assist-modal">
@@ -273,8 +304,13 @@ function AssistModal({ players, scorerIdx, onSelect, onNone, onCancel }) {
         </div>
         <div className="assist-modal-body">
           <button className="assist-none-btn" onClick={onNone}>Sem assistência</button>
+          {eligible.length === 0 && (
+            <div className="assist-label" style={{padding:'12px 4px',color:'var(--muted)'}}>
+              Nenhum atleta elegível em quadra
+            </div>
+          )}
           <div className="assist-players-grid">
-            {players.map((p,i) => i===scorerIdx ? null : (
+            {eligible.map(({ p, i }) => (
               <button key={i} className="assist-player-btn" onClick={() => onSelect(i)}>
                 <span className="assist-pnum">#{p.number}</span>
                 <span className="assist-pname">{p.name.split(' ')[0]}</span>
@@ -606,17 +642,32 @@ export default function App() {
   const commitFT = useCallback((ftTeamIdx, playerIdx, made) => {
     if (!game) return;
     const pl = game.teams[ftTeamIdx].players[playerIdx];
+    const scoringTeam = ftTeamIdx;
+    const opposingTeam = 1 - ftTeamIdx;
     setGame(g => {
       const teams = g.teams.map((t, ti) => {
-        if (ti !== ftTeamIdx) return t;
-        return {
-          ...t,
-          score: t.score + (made ? 1 : 0),
-          players: t.players.map((p, pi) => {
-            if (pi !== playerIdx) return p;
-            return { ...p, ftm: p.ftm + (made?1:0), fta: p.fta+1, pts: p.pts + (made?1:0) };
-          })
-        };
+        if (ti === scoringTeam) {
+          return {
+            ...t,
+            score: t.score + (made ? 1 : 0),
+            players: t.players.map((p, pi) => {
+              const n = { ...p };
+              if (pi === playerIdx) { n.ftm += made?1:0; n.fta += 1; n.pts += made?1:0; }
+              if (made && p.active) n.plusMinus = (n.plusMinus||0) + 1;
+              return n;
+            })
+          };
+        }
+        if (ti === opposingTeam) {
+          return {
+            ...t,
+            players: t.players.map(p => {
+              if (!p.active || !made) return p;
+              return { ...p, plusMinus: (p.plusMinus||0) - 1 };
+            })
+          };
+        }
+        return t;
       });
       const entry = { id: Date.now(), q: QUARTERS[g.quarter], time: fmtTime(g.clock),
         team: g.teams[ftTeamIdx].name, player: `#${pl.number} ${pl.name.split(' ')[0]}`,
@@ -624,8 +675,6 @@ export default function App() {
       return { ...g, teams, log: [entry, ...g.log] };
     });
     if (made) showToast(`+1 LL — ${pl.name.split(' ')[0]}`);
-    // Não fecha modal aqui — o controle de abrir/fechar fica no JSX (attempt counter)
-    // O modal fechará quando attempt === total (controlado pelo onMade/onMissed no JSX)
   }, [game]);
 
   // ── Registra arremesso com assistência ────────────────────────────────────
@@ -636,28 +685,34 @@ export default function App() {
 
     setGame(g => {
       const teams = g.teams.map((t, ti) => {
-        if (ti !== activeTeam) return t;
         const players = t.players.map((p, pi) => {
           const n = { ...p };
-          if (pi === assistIdx) n.ast = (n.ast||0)+1;
-          if (pi === playerIdx) {
-            if      (actionId==='fg2m')    { n.fg2m++; n.fg2a++; }
-            else if (actionId==='fg2miss') { n.fg2a++; }
-            else if (actionId==='fg3m')    { n.fg3m++; n.fg3a++; }
-            else if (actionId==='fg3miss') { n.fg3a++; }
-            n.pts = n.fg2m*2 + n.fg3m*3 + n.ftm;
-            if (xPct !== null) {
-              const apl = assistIdx !== null ? g.teams[activeTeam].players[assistIdx] : null;
-              n.shots = [...(n.shots||[]), {
-                x: xPct, y: yPct, made, three, zone: three?'3pts':'2pts',
-                assistedBy: apl ? `#${apl.number} ${apl.name.split(' ')[0]}` : '',
-                q: QUARTERS[g.quarter], time: fmtTime(g.clock),
-              }];
+          if (ti === activeTeam) {
+            if (pi === assistIdx) n.ast = (n.ast||0)+1;
+            if (pi === playerIdx) {
+              if      (actionId==='fg2m')    { n.fg2m++; n.fg2a++; }
+              else if (actionId==='fg2miss') { n.fg2a++; }
+              else if (actionId==='fg3m')    { n.fg3m++; n.fg3a++; }
+              else if (actionId==='fg3miss') { n.fg3a++; }
+              n.pts = n.fg2m*2 + n.fg3m*3 + n.ftm;
+              if (xPct !== null) {
+                const apl = assistIdx !== null ? g.teams[activeTeam].players[assistIdx] : null;
+                n.shots = [...(n.shots||[]), {
+                  x: xPct, y: yPct, made, three, zone: three?'3pts':'2pts',
+                  assistedBy: apl ? `#${apl.number} ${apl.name.split(' ')[0]}` : '',
+                  q: QUARTERS[g.quarter], time: fmtTime(g.clock),
+                }];
+              }
             }
+            // Plus/minus: ativos do time que marcou ganham +pts
+            if (made && p.active) n.plusMinus = (n.plusMinus||0) + pts;
+          } else {
+            // Time adversário: ativos perdem -pts
+            if (made && p.active) n.plusMinus = (n.plusMinus||0) - pts;
           }
           return n;
         });
-        return { ...t, score: t.score + pts, players };
+        return { ...t, score: ti === activeTeam ? t.score + pts : t.score, players };
       });
       const sp = g.teams[activeTeam].players[playerIdx];
       const ap = assistIdx !== null ? g.teams[activeTeam].players[assistIdx] : null;
@@ -981,7 +1036,12 @@ export default function App() {
               )}
             </div>
             <div ref={courtRef} className="court-container">
-              <BasketballCourt shots={activeShots} onCourtClick={handleCourtClick} hasPlayer={selectedPlayer !== null}/>
+              <BasketballCourt
+                shots={activeShots}
+                onCourtClick={handleCourtClick}
+                hasPlayer={selectedPlayer !== null}
+                attackDir={activeTeam === 0 ? 'right' : 'left'}
+              />
             </div>
             {activeShots.length>0 && (
               <div className="shot-summary">
@@ -1056,7 +1116,7 @@ export default function App() {
                 {active.length>0 && (
                   <div className="table-wrap">
                     <table className="stats-table">
-                      <thead><tr><th>Atleta</th><th>PTS</th><th>AST</th><th>REB</th><th>STL</th><th>BLK</th><th>TO</th><th>FG%</th><th>3P%</th><th>LL%</th><th>FL</th></tr></thead>
+                      <thead><tr><th>Atleta</th><th>PTS</th><th>AST</th><th>REB</th><th>STL</th><th>BLK</th><th>TO</th><th>FG%</th><th>3P%</th><th>LL%</th><th>FL</th><th>+/-</th><th>PIR</th></tr></thead>
                       <tbody>
                         {active.map(p=>(
                           <tr key={p.id} data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}>
@@ -1072,6 +1132,8 @@ export default function App() {
                             <td>{pct(p.fg3m,p.fg3a)}</td>
                             <td>{pct(p.ftm,p.fta)}</td>
                             <td data-warn={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY} data-danger={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}>{p.fouls}{p.techFouls>0?`+${p.techFouls}t`:''}</td>
+                            <td className={(p.plusMinus||0)>0?'pm-pos':(p.plusMinus||0)<0?'pm-neg':''}>{(p.plusMinus||0)>=0?`+${p.plusMinus||0}`:p.plusMinus||0}</td>
+                            <td className={calcPIR(p)>0?'pm-pos':calcPIR(p)<0?'pm-neg':''}>{calcPIR(p)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1084,6 +1146,8 @@ export default function App() {
                           <td>{pct(tot.fg3m,tot.fg3a)}</td>
                           <td>{pct(tot.ftm,tot.fta)}</td>
                           <td>{tot.fouls}</td>
+                          <td></td>
+                          <td></td>
                         </tr>
                       </tfoot>
                     </table>
