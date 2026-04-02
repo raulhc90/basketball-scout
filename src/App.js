@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
 
-const QUARTERS = ['1Q', '2Q', '3Q', '4Q', 'OT'];
+const BASE_QUARTERS = ['1Q', '2Q', '3Q', '4Q'];
+const getQuarterLabel = (q) => q < 4 ? BASE_QUARTERS[q] : `OT${q - 3}`;
+const QUARTERS = BASE_QUARTERS; // mantido para compatibilidade de log
 const STORAGE_KEY = 'bball_scout_games';
 const FOUL_DISQUALIFY = 6;   // faltas para disqualificação
 const FOUL_TROUBLE    = 4;   // faltas para foul trouble
@@ -109,30 +111,40 @@ function exportShotsCSV(game) {
 //   1) py < latY1 ou py > latY2 (acima/abaixo da linha lateral — corner)
 //   2) px <= arcX1 (lado esq) ou px >= arcX2 (lado dir) — corredor lateral
 //   3) distância da cesta mais próxima > arcR
-function isThreePointer(xPct, yPct) {
+// attackDir: 'right' = time ataca para a cesta da direita (cx2=566)
+//            'left'  = time ataca para a cesta da esquerda (cx1=34)
+// Valida também se o clique está no lado de ataque correto.
+// Retorna { valid, three } — valid=false se clicou no lado errado.
+function classifyShot(xPct, yPct, attackDir) {
   const W = 600, H = 320, cy = 160;
   const cx1 = 34,  cx2 = 566;
   const arcR = 145;
   const arcX1 = 67, arcX2 = 533;
   const latY1 = 19, latY2 = 301;
+  const midX = W / 2; // linha do meio = 300px = 50%
 
   const px = xPct * W / 100;
   const py = yPct * H / 100;
 
-  // Canto/fundo (corner three)
-  if (py < latY1 || py > latY2) return true;
+  // Verifica se clicou no lado de ataque correto
+  // Time que ataca pra direita DEVE clicar na metade direita (px > midX)
+  // Time que ataca pra esquerda DEVE clicar na metade esquerda (px < midX)
+  if (attackDir === 'right' && px <= midX) return { valid: false, three: false };
+  if (attackDir === 'left'  && px >= midX) return { valid: false, three: false };
 
-  const dL = Math.sqrt((px - cx1) ** 2 + (py - cy) ** 2);
-  const dR = Math.sqrt((px - cx2) ** 2 + (py - cy) ** 2);
-
-  if (dL <= dR) {
-    // Lado esquerdo — corredor lateral ou além do arco
-    if (px <= arcX1) return true;
-    return dL > arcR;
+  // Agora classifica 2pts ou 3pts com base na cesta de ataque
+  if (attackDir === 'right') {
+    // Atacando cesta direita (cx2=566)
+    const d = Math.sqrt((px - cx2) ** 2 + (py - cy) ** 2);
+    if (py < latY1 || py > latY2) return { valid: true, three: true };  // corner
+    if (px >= arcX2) return { valid: true, three: true };                // corredor lateral dir
+    return { valid: true, three: d > arcR };
   } else {
-    // Lado direito
-    if (px >= arcX2) return true;
-    return dR > arcR;
+    // Atacando cesta esquerda (cx1=34)
+    const d = Math.sqrt((px - cx1) ** 2 + (py - cy) ** 2);
+    if (py < latY1 || py > latY2) return { valid: true, three: true };  // corner
+    if (px <= arcX1) return { valid: true, three: true };                // corredor lateral esq
+    return { valid: true, three: d > arcR };
   }
 }
 
@@ -232,29 +244,24 @@ function BasketballCourt({ shots=[], onCourtClick, hasPlayer=false, attackDir='r
         <line x1={W-2} y1={cy} x2={cx2+5} y2={cy}/>
       </g>
 
-      {/* Labels de zona */}
-      <g fill="#4a5570" fontSize="8" fontFamily="sans-serif" textAnchor="middle">
-        <text x="48"   y="18">3pts</text>
-        <text x={W/2}  y="14">3pts topo</text>
-        <text x="552"  y="18">3pts</text>
-        <text x="62"   y={cy+4}>Garrafão</text>
-        <text x="538"  y={cy+4}>Garrafão</text>
-        <text x="220"  y={cy-10} fontSize="7">2pts médio</text>
-        <text x="380"  y={cy-10} fontSize="7">2pts médio</text>
-      </g>
-
-      {/* Seta de ataque */}
+      {/* Seta de ataque estilizada */}
       {attackDir === 'right' ? (
-        <g stroke="#f97316" strokeWidth="2" fill="none" opacity="0.7">
-          <line x1="220" y1={cy} x2="340" y2={cy} strokeLinecap="round"/>
-          <polyline points={`325,${cy-10} 340,${cy} 325,${cy+10}`} strokeLinejoin="round"/>
-          <text x="280" y={cy-14} fill="#f97316" fontSize="9" fontFamily="sans-serif" textAnchor="middle" stroke="none">ataque</text>
+        <g opacity="0.85">
+          {/* Trilha da seta */}
+          <line x1="215" y1={cy} x2="348" y2={cy} stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 4"/>
+          {/* Cabeça da seta preenchida */}
+          <polygon points={`348,${cy-11} 370,${cy} 348,${cy+11}`} fill="#f97316" opacity="0.9"/>
+          {/* Label acima */}
+          <text x="290" y={cy-16} fill="#f97316" fontSize="9" fontFamily="sans-serif" fontWeight="bold" textAnchor="middle" letterSpacing="2">ATAQUE</text>
+          {/* Linha decorativa sob o label */}
+          <line x1="252" y1={cy-11} x2="328" y2={cy-11} stroke="#f97316" strokeWidth="0.7" opacity="0.4"/>
         </g>
       ) : (
-        <g stroke="#f97316" strokeWidth="2" fill="none" opacity="0.7">
-          <line x1="380" y1={cy} x2="260" y2={cy} strokeLinecap="round"/>
-          <polyline points={`275,${cy-10} 260,${cy} 275,${cy+10}`} strokeLinejoin="round"/>
-          <text x="320" y={cy-14} fill="#f97316" fontSize="9" fontFamily="sans-serif" textAnchor="middle" stroke="none">ataque</text>
+        <g opacity="0.85">
+          <line x1="385" y1={cy} x2="252" y2={cy} stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 4"/>
+          <polygon points={`252,${cy-11} 230,${cy} 252,${cy+11}`} fill="#f97316" opacity="0.9"/>
+          <text x="310" y={cy-16} fill="#f97316" fontSize="9" fontFamily="sans-serif" fontWeight="bold" textAnchor="middle" letterSpacing="2">ATAQUE</text>
+          <line x1="272" y1={cy-11} x2="348" y2={cy-11} stroke="#f97316" strokeWidth="0.7" opacity="0.4"/>
         </g>
       )}
 
@@ -552,12 +559,28 @@ export default function App() {
   const nextQuarter = useCallback(() => {
     setGame(g => {
       if (!g) return g;
-      const nextQ = Math.min(g.quarter + 1, 4);
-      const nextClock = nextQ === 4 ? 300 : 600;
-      // OT: não zera faltas; demais quartos: zera
-      const teamFouls = nextQ === 4
-        ? g.teamFouls
-        : g.teamFouls.map(tf => tf.map((f,qi) => qi === nextQ ? 0 : f));
+      const nextQ = g.quarter + 1;
+      // Regulares: 10min | OTs: 5min
+      const nextClock = nextQ >= 4 ? 300 : 600;
+      // Quartos regulares: zera faltas coletivas para o próximo quarto
+      // OT: mantém (faltas não zeram em prorrogação)
+      let teamFouls = g.teamFouls || [[0,0,0,0,0],[0,0,0,0,0]];
+      if (nextQ < 4) {
+        // Garante que o array tem espaço para o próximo quarto
+        teamFouls = teamFouls.map(tf => {
+          const arr = [...tf];
+          while (arr.length <= nextQ) arr.push(0);
+          arr[nextQ] = 0;
+          return arr;
+        });
+      } else {
+        // OT: expande o array se necessário, sem zerar
+        teamFouls = teamFouls.map(tf => {
+          const arr = [...tf];
+          while (arr.length <= nextQ) arr.push(0);
+          return arr;
+        });
+      }
       return { ...g, quarter: nextQ, clock: nextClock, teamFouls };
     });
     setRunning(false);
@@ -602,9 +625,13 @@ export default function App() {
     const nowBonus = newTfq >= TEAM_FOUL_BONUS;
 
     setGame(g => {
-      const teamFouls = (g.teamFouls || [[0,0,0,0,0],[0,0,0,0,0]]).map((tf, ti) =>
-        ti === activeTeam ? tf.map((f,qi) => qi === g.quarter ? f+1 : f) : tf
-      );
+      const teamFouls = (g.teamFouls || [[0,0,0,0,0],[0,0,0,0,0]]).map((tf, ti) => {
+        if (ti !== activeTeam) return tf;
+        const arr = [...tf];
+        while (arr.length <= g.quarter) arr.push(0);
+        arr[g.quarter] = (arr[g.quarter] || 0) + 1;
+        return arr;
+      });
       const teams = g.teams.map((t, ti) => {
         if (ti !== activeTeam) return t;
         return {
@@ -615,7 +642,7 @@ export default function App() {
           })
         };
       });
-      const entry = { id: Date.now(), q: QUARTERS[g.quarter], time: fmtTime(g.clock),
+      const entry = { id: Date.now(), q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
         team: g.teams[activeTeam].name,
         player: `#${pl.number} ${pl.name.split(' ')[0]}`,
         action: `Falta ${foulType}`, pts: 0, color: '#f97316' };
@@ -669,7 +696,7 @@ export default function App() {
         }
         return t;
       });
-      const entry = { id: Date.now(), q: QUARTERS[g.quarter], time: fmtTime(g.clock),
+      const entry = { id: Date.now(), q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
         team: g.teams[ftTeamIdx].name, player: `#${pl.number} ${pl.name.split(' ')[0]}`,
         action: made ? 'LL certo' : 'LL erro', pts: made?1:0, color: made?'#f59e0b':'#475569' };
       return { ...g, teams, log: [entry, ...g.log] };
@@ -700,7 +727,7 @@ export default function App() {
                 n.shots = [...(n.shots||[]), {
                   x: xPct, y: yPct, made, three, zone: three?'3pts':'2pts',
                   assistedBy: apl ? `#${apl.number} ${apl.name.split(' ')[0]}` : '',
-                  q: QUARTERS[g.quarter], time: fmtTime(g.clock),
+                  q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
                 }];
               }
             }
@@ -717,10 +744,10 @@ export default function App() {
       const sp = g.teams[activeTeam].players[playerIdx];
       const ap = assistIdx !== null ? g.teams[activeTeam].players[assistIdx] : null;
       const entries = [];
-      if (ap) entries.push({ id: Date.now(), q: QUARTERS[g.quarter], time: fmtTime(g.clock),
+      if (ap) entries.push({ id: Date.now(), q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
         team: g.teams[activeTeam].name, player: `#${ap.number} ${ap.name.split(' ')[0]}`,
         action: 'Assist.', pts: 0, color: '#a855f7' });
-      entries.push({ id: Date.now()+1, q: QUARTERS[g.quarter], time: fmtTime(g.clock),
+      entries.push({ id: Date.now()+1, q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
         team: g.teams[activeTeam].name, player: `#${sp.number} ${sp.name.split(' ')[0]}`,
         action: made?(three?'3pts':'2pts'):(three?'3x falha':'2x falha'), pts, color: col });
       return { ...g, teams, log: [...entries, ...g.log] };
@@ -733,14 +760,17 @@ export default function App() {
   const handleCourtClick = useCallback(e => {
     if (selectedPlayer === null) return;
     if (confirmShot || assistPending || foulPending || ftModal || subModal) return;
-    // Usar e.currentTarget (o SVG) para coordenadas precisas independente do wrapper
+    // Só registra se o cronômetro estiver rodando
+    if (!running) { showToast('Inicie o cronômetro para marcar'); return; }
     const svgEl = e.currentTarget;
     const rect = svgEl.getBoundingClientRect();
     const xPct = (e.clientX - rect.left) / rect.width  * 100;
     const yPct = (e.clientY - rect.top)  / rect.height * 100;
-    const three = isThreePointer(xPct, yPct);
+    const dir = activeTeam === 0 ? 'right' : 'left';
+    const { valid, three } = classifyShot(xPct, yPct, dir);
+    if (!valid) { showToast('Arremesso no lado errado da quadra'); return; }
     setConfirmShot({ xPct, yPct, three });
-  }, [selectedPlayer, confirmShot, assistPending, foulPending, ftModal, subModal]);
+  }, [selectedPlayer, confirmShot, assistPending, foulPending, ftModal, subModal, running, activeTeam]);
 
   // ── Ações miscellâneas ─────────────────────────────────────────────────────
   const applyMisc = useCallback(action => {
@@ -755,7 +785,7 @@ export default function App() {
         })};
       });
       const pl = g.teams[activeTeam].players[selectedPlayer];
-      const entry = { id: Date.now(), q: QUARTERS[g.quarter], time: fmtTime(g.clock),
+      const entry = { id: Date.now(), q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
         team: g.teams[activeTeam].name, player: `#${pl.number} ${pl.name.split(' ')[0]}`,
         action: action.label, pts: 0, color: action.color };
       return { ...g, teams, log: [entry, ...g.log] };
@@ -816,7 +846,7 @@ export default function App() {
   const td  = game.teams[activeTeam];
   const sp  = selectedPlayer !== null ? td.players[selectedPlayer] : null;
   const activeShots = sp ? (sp.shots||[]) : td.players.flatMap(p => p.shots||[]);
-  const tfq = game.teamFouls?.[activeTeam]?.[game.quarter] || 0;
+  const tfq = (game.teamFouls?.[activeTeam] || [])[game.quarter] || 0;
   const inBonus = tfq >= TEAM_FOUL_BONUS;
 
   return (
@@ -917,20 +947,20 @@ export default function App() {
             <div className="team-foul-dots">
               {[1,2,3,4,5].map(n=>(
                 <span key={n} className="foul-dot"
-                  data-filled={(game.teamFouls?.[0]?.[game.quarter]||0)>=n}
+                  data-filled={((game.teamFouls?.[0]||[])[game.quarter]||0)>=n}
                   data-bonus={n===TEAM_FOUL_BONUS}/>
               ))}
             </div>
           </div>
 
           <div className="center-info">
-            <span className="quarter-label">{QUARTERS[game.quarter]}</span>
+            <span className="quarter-label">{getQuarterLabel(game.quarter)}</span>
             <div className="clock">{fmtTime(game.clock)}</div>
             <div className="clock-btns">
               <button onClick={() => setRunning(r=>!r)}>{running ? '⏸' : '▶'}</button>
               <button onClick={() => setGame(g=>({...g,clock:game.quarter===4?300:600}))}>↺</button>
-              <button className="next-q-btn" onClick={nextQuarter} disabled={game.quarter>=4}>
-                {game.quarter<4 ? `›${QUARTERS[game.quarter+1]}` : 'Fim'}
+              <button className="next-q-btn" onClick={nextQuarter}>
+                ›{getQuarterLabel(game.quarter + 1)}
               </button>
             </div>
           </div>
@@ -942,7 +972,7 @@ export default function App() {
             <div className="team-foul-dots">
               {[1,2,3,4,5].map(n=>(
                 <span key={n} className="foul-dot"
-                  data-filled={(game.teamFouls?.[1]?.[game.quarter]||0)>=n}
+                  data-filled={((game.teamFouls?.[1]||[])[game.quarter]||0)>=n}
                   data-bonus={n===TEAM_FOUL_BONUS}/>
               ))}
             </div>
@@ -951,7 +981,7 @@ export default function App() {
 
         {inBonus && (
           <div className="bonus-bar">
-            BONIFICAÇÃO — {game.teams[activeTeam].name} ({tfq} faltas no {QUARTERS[game.quarter]})
+            BONIFICAÇÃO — {game.teams[activeTeam].name} ({tfq} faltas no {getQuarterLabel(game.quarter)})
           </div>
         )}
 
@@ -1084,20 +1114,26 @@ export default function App() {
       {view==='stats' && (
         <main className="stats-view">
           <div className="fouls-summary">
-            <div className="fouls-summary-title">Faltas coletivas por quarto</div>
+            <div className="fouls-summary-title">Faltas coletivas por período</div>
             <table className="fouls-table">
               <thead>
-                <tr><th>Time</th>{QUARTERS.slice(0,game.quarter+1).map(q=><th key={q}>{q}</th>)}<th>Total</th></tr>
+                <tr>
+                  <th>Time</th>
+                  {Array.from({length: game.quarter+1}, (_,i) => (
+                    <th key={i}>{getQuarterLabel(i)}</th>
+                  ))}
+                  <th>Total</th>
+                </tr>
               </thead>
               <tbody>
                 {game.teams.map((t,ti)=>{
-                  const tf = game.teamFouls?.[ti]||[0,0,0,0,0];
+                  const tf = game.teamFouls?.[ti] || [];
                   const total = tf.reduce((a,b)=>a+b,0);
                   return (
                     <tr key={ti}>
                       <td className="player-cell">{t.name}</td>
-                      {tf.slice(0,game.quarter+1).map((f,qi)=>(
-                        <td key={qi} data-warn={f>=TEAM_FOUL_BONUS}>{f}</td>
+                      {Array.from({length: game.quarter+1}, (_,qi) => (
+                        <td key={qi} data-warn={(tf[qi]||0)>=TEAM_FOUL_BONUS}>{tf[qi]||0}</td>
                       ))}
                       <td className="pts-cell">{total}</td>
                     </tr>
@@ -1108,7 +1144,12 @@ export default function App() {
           </div>
           {game.teams.map((team,ti)=>{
             const tot = totals(team);
-            const active = team.players.filter(p=>p.pts||p.ast||p.reb||p.oreb||p.stl||p.blk||p.to||p.fg2a||p.fg3a||p.fouls);
+            // Mostra atletas que entraram em quadra: active=true OU teve qualquer stat registrada
+            const active = team.players.filter(p =>
+              p.active || p.pts || p.ast || p.reb || p.oreb || p.stl || p.blk ||
+              p.to || p.fg2a || p.fg3a || p.ftm || p.fta || p.fouls ||
+              (p.plusMinus||0) !== 0
+            );
             return (
               <div key={ti} className="stats-block">
                 <div className="stats-header"><span>{team.name}</span><span className="stats-total-score">{team.score} pts</span></div>
