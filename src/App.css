@@ -828,3 +828,63 @@ tr[data-disq=true] { opacity:.6; }
 /* ── Plus/Minus e PIR ── */
 .pm-pos { color: var(--green); font-weight: 700; }
 .pm-neg { color: var(--red);   font-weight: 700; }
+
+/* ── Jogo Finalizado ── */
+.game-over-banner {
+  background: linear-gradient(135deg, rgba(249,115,22,.15), rgba(249,115,22,.05));
+  border: 1.5px solid rgba(249,115,22,.4);
+  border-radius: var(--r);
+  margin: 12px;
+  padding: 20px 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.game-over-title {
+  font-family: var(--fd);
+  font-size: 11px; font-weight: 700;
+  letter-spacing: .15em; text-transform: uppercase;
+  color: var(--accent);
+}
+.game-over-winner {
+  font-family: var(--fd);
+  font-size: 26px; font-weight: 800;
+  color: var(--green);
+  letter-spacing: .03em;
+}
+.game-over-score {
+  font-family: var(--fd);
+  font-size: 36px; font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+}
+.game-over-loser {
+  font-family: var(--fd);
+  font-size: 15px; font-weight: 600;
+  color: var(--muted);
+}
+.game-over-reset {
+  margin-top: 10px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px; font-family: var(--fd);
+  padding: 6px 14px; border-radius: 5px;
+  cursor: pointer; align-self: center;
+}
+.game-over-reset:active { color: var(--text); border-color: var(--accent); }
+
+/* ── Next Q button finished state ── */
+.next-q-btn[data-finished=true] {
+  background: rgba(249,115,22,.15);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── Drag over player card ── */
+.player-btn[data-drag-over=true] {
+  border-color: var(--accent) !important;
+  background: rgba(249,115,22,.18) !important;
+  transform: scale(1.04);
+}

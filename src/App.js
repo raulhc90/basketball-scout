@@ -93,6 +93,14 @@ function exportStatsCSV(game) {
   });
   dl(lines.join('\n'), `stats_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
+function exportLogCSV(game) {
+  const lines = ['Quarto,Tempo,Time,Atleta,Acao,Pontos'];
+  game.log.forEach(e => {
+    lines.push(`"${e.q}","${e.time}","${e.team}","${e.player}","${e.action}",${e.pts}`);
+  });
+  dl(lines.join('\n'), `log_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
+}
+
 function exportShotsCSV(game) {
   const lines = ['Atleta,Time,Quarto,Tempo,X_pct,Y_pct,Convertido,Tipo,Assistencia'];
   game.teams.forEach(t => t.players.forEach(p =>
@@ -115,32 +123,36 @@ function exportShotsCSV(game) {
 //            'left'  = time ataca para a cesta da esquerda (cx1=34)
 // Valida também se o clique está no lado de ataque correto.
 // Retorna { valid, three } — valid=false se clicou no lado errado.
+// attackDir: 'right' = time ataca cesta direita | 'left' = cesta esquerda
+// Regras:
+//   - Qualquer clique é válido (ambos os lados da quadra)
+//   - Na metade de DEFESA (lado oposto à cesta de ataque) = sempre 3pts
+//   - Na metade de ATAQUE = classifica normalmente (2 ou 3 pela linha de 3pts)
 function classifyShot(xPct, yPct, attackDir) {
   const W = 600, H = 320, cy = 160;
   const cx1 = 34,  cx2 = 566;
   const arcR = 145;
   const arcX1 = 67, arcX2 = 533;
   const latY1 = 19, latY2 = 301;
-  const midX = W / 2; // linha do meio = 300px = 50%
+  const midX = W / 2;
 
   const px = xPct * W / 100;
   const py = yPct * H / 100;
 
-  // Verifica se clicou no lado de ataque correto
-  // Time que ataca pra direita DEVE clicar na metade direita (px > midX)
-  // Time que ataca pra esquerda DEVE clicar na metade esquerda (px < midX)
-  if (attackDir === 'right' && px <= midX) return { valid: false, three: false };
-  if (attackDir === 'left'  && px >= midX) return { valid: false, three: false };
-
-  // Agora classifica 2pts ou 3pts com base na cesta de ataque
   if (attackDir === 'right') {
-    // Atacando cesta direita (cx2=566)
+    // Cesta de ataque = direita (cx2)
+    // Lado defensivo (metade esquerda) = sempre 3pts
+    if (px < midX) return { valid: true, three: true };
+    // Lado ofensivo (metade direita): classifica pela linha de 3pts
     const d = Math.sqrt((px - cx2) ** 2 + (py - cy) ** 2);
     if (py < latY1 || py > latY2) return { valid: true, three: true };  // corner
     if (px >= arcX2) return { valid: true, three: true };                // corredor lateral dir
     return { valid: true, three: d > arcR };
   } else {
-    // Atacando cesta esquerda (cx1=34)
+    // Cesta de ataque = esquerda (cx1)
+    // Lado defensivo (metade direita) = sempre 3pts
+    if (px > midX) return { valid: true, three: true };
+    // Lado ofensivo (metade esquerda): classifica pela linha de 3pts
     const d = Math.sqrt((px - cx1) ** 2 + (py - cy) ** 2);
     if (py < latY1 || py > latY2) return { valid: true, three: true };  // corner
     if (px <= arcX1) return { valid: true, three: true };                // corredor lateral esq
@@ -458,6 +470,103 @@ function SubModal({ title, reason, players, outPlayerIdx, onSub, onCancel, canCa
   );
 }
 
+// ─── HeatMap Component ───────────────────────────────────────────────────────
+function HeatMap({ shots, teamName, attackDir }) {
+  const W = 600, H = 320, cy = 160, midX = 300;
+  const CELL = 30; // tamanho das células do grid
+
+  // Monta grid de frequência
+  const grid = {};
+  shots.forEach(s => {
+    const gx = Math.floor(s.x * W / 100 / CELL);
+    const gy = Math.floor(s.y * H / 100 / CELL);
+    const key = `${gx},${gy}`;
+    if (!grid[key]) grid[key] = { made: 0, total: 0 };
+    grid[key].total++;
+    if (s.made) grid[key].made++;
+  });
+
+  const maxTotal = Math.max(...Object.values(grid).map(v => v.total), 1);
+
+  return (
+    <div className="heatmap-wrap">
+      <div className="heatmap-title">{teamName} — {shots.length} arremessos</div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="court-svg">
+        <rect x="0" y="0" width={W} height={H} fill="#1a1f2a"/>
+
+        {/* Células do heatmap */}
+        {Object.entries(grid).map(([key, val]) => {
+          const [gx, gy] = key.split(',').map(Number);
+          const intensity = val.total / maxTotal;
+          const pctMade = val.made / val.total;
+          // Verde se bom aproveitamento, vermelho se ruim, laranja intermediário
+          const r = pctMade < 0.4 ? 239 : pctMade < 0.6 ? 249 : 34;
+          const g2 = pctMade < 0.4 ? 68  : pctMade < 0.6 ? 115 : 197;
+          const b = pctMade < 0.4 ? 68  : pctMade < 0.6 ? 22  : 94;
+          return (
+            <rect key={key}
+              x={gx * CELL} y={gy * CELL}
+              width={CELL} height={CELL}
+              fill={`rgb(${r},${g2},${b})`}
+              opacity={0.15 + intensity * 0.7}
+            />
+          );
+        })}
+
+        {/* Linhas da quadra */}
+        <g stroke="#4a5570" strokeWidth="1" fill="none">
+          <rect x="2" y="2" width={W-4} height={H-4} rx="2"/>
+          <line x1={midX} y1="2" x2={midX} y2={H-2} strokeDasharray="4 3"/>
+          <circle cx={W/2} cy={cy} r="38"/>
+          <rect x="2" y={cy-52} width="124" height="104"/>
+          <rect x="476" y={cy-52} width="122" height="104"/>
+          <line x1="2"   y1="19" x2="67"  y2="19"/><path d="M 67 19 A 145 145 0 0 1 67 301"/><line x1="67"  y1="301" x2="2"   y2="301"/>
+          <line x1="533" y1="19" x2="598" y2="19"/><path d="M 533 19 A 145 145 0 0 0 533 301"/><line x1="533" y1="301" x2="598" y2="301"/>
+        </g>
+
+        {/* Linha de meio campo destacada */}
+        <line x1={midX} y1="2" x2={midX} y2={H-2} stroke="#5a6a95" strokeWidth="1.5"/>
+
+        {/* Cestas */}
+        <g stroke="#f97316" strokeWidth="1.8" fill="none">
+          <circle cx="34"  cy={cy} r="5.5"/><line x1="2"   y1={cy} x2="29"  y2={cy}/>
+          <circle cx="566" cy={cy} r="5.5"/><line x1="571" y1={cy} x2="598" y2={cy}/>
+        </g>
+
+        {/* Seta de ataque */}
+        {attackDir === 'right' ? (
+          <g opacity="0.7">
+            <line x1="215" y1={cy} x2="345" y2={cy} stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeDasharray="5 4"/>
+            <polygon points={`345,${cy-9} 362,${cy} 345,${cy+9}`} fill="#f97316"/>
+          </g>
+        ) : (
+          <g opacity="0.7">
+            <line x1="385" y1={cy} x2="255" y2={cy} stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeDasharray="5 4"/>
+            <polygon points={`255,${cy-9} 238,${cy} 255,${cy+9}`} fill="#f97316"/>
+          </g>
+        )}
+
+        {/* Dots individuais */}
+        {shots.map((s,i) => {
+          const px = s.x * W / 100, py = s.y * H / 100;
+          return s.made
+            ? <circle key={i} cx={px} cy={py} r="4" fill="#22c55e" stroke="#fff" strokeWidth="0.5" opacity="0.85"/>
+            : <g key={i} opacity="0.75">
+                <line x1={px-3.5} y1={py-3.5} x2={px+3.5} y2={py+3.5} stroke="#ef4444" strokeWidth="1.6" strokeLinecap="round"/>
+                <line x1={px+3.5} y1={py-3.5} x2={px-3.5} y2={py+3.5} stroke="#ef4444" strokeWidth="1.6" strokeLinecap="round"/>
+              </g>;
+        })}
+      </svg>
+      <div className="heatmap-legend">
+        <span className="hml-item" style={{color:'#22c55e'}}>● Convertido ({shots.filter(s=>s.made).length})</span>
+        <span className="hml-item" style={{color:'#ef4444'}}>✕ Errado ({shots.filter(s=>!s.made).length})</span>
+        <span className="hml-item" style={{color:'#f97316'}}>FG: {shots.length>0 ? Math.round(shots.filter(s=>s.made).length/shots.length*100)+'%' : '—'}</span>
+        <span className="hml-item" style={{color:'#3b82f6'}}>3P: {(() => { const t=shots.filter(s=>s.three); return t.length>0 ? Math.round(t.filter(s=>s.made).length/t.length*100)+'%' : '—'; })()}</span>
+      </div>
+    </div>
+  );
+}
+
 // ─── New Game Modal ───────────────────────────────────────────────────────────
 function NewGameModal({ onStart, onClose }) {
   const [nameA, setNameA] = useState('Time A');
@@ -521,6 +630,8 @@ export default function App() {
   const [ftPlayer, setFtPlayer]           = useState(null);
   // subModal: { reason, outIdx, canCancel } | null
   const [subModal, setSubModal]           = useState(null);
+  // drag & drop substituição
+  const [dragPlayer, setDragPlayer]       = useState(null);
 
   const courtRef = useRef(null);
 
@@ -610,6 +721,30 @@ export default function App() {
     setSubModal(null);
     setSelectedPlayer(null);
   }, [game, subModal, activeTeam]);
+
+  // Drag-to-sub: confirma substituição direta (já sabe quem sai e entra)
+  const executeDirectSub = useCallback((outIdx, inIdx) => {
+    if (!game) return;
+    setGame(g => ({
+      ...g,
+      teams: g.teams.map((t, ti) => {
+        if (ti !== activeTeam) return t;
+        return {
+          ...t,
+          players: t.players.map((p, pi) => {
+            if (pi === outIdx) return { ...p, active: false };
+            if (pi === inIdx)  return { ...p, active: true  };
+            return p;
+          })
+        };
+      })
+    }));
+    const out = game.teams[activeTeam].players[outIdx];
+    const inn = game.teams[activeTeam].players[inIdx];
+    showToast(`↕ ${out.name.split(' ')[0]} → ${inn.name.split(' ')[0]}`);
+    setSubModal(null);
+    setSelectedPlayer(null);
+  }, [game, activeTeam]);
 
   // ── Falta ──────────────────────────────────────────────────────────────────
   const commitFoul = useCallback((foulType, isTech) => {
@@ -760,6 +895,7 @@ export default function App() {
   const handleCourtClick = useCallback(e => {
     if (selectedPlayer === null) return;
     if (confirmShot || assistPending || foulPending || ftModal || subModal) return;
+    if (game?.finished) { showToast('Jogo finalizado'); return; }
     // Só registra se o cronômetro estiver rodando
     if (!running) { showToast('Inicie o cronômetro para marcar'); return; }
     const svgEl = e.currentTarget;
@@ -770,7 +906,7 @@ export default function App() {
     const { valid, three } = classifyShot(xPct, yPct, dir);
     if (!valid) { showToast('Arremesso no lado errado da quadra'); return; }
     setConfirmShot({ xPct, yPct, three });
-  }, [selectedPlayer, confirmShot, assistPending, foulPending, ftModal, subModal, running, activeTeam]);
+  }, [selectedPlayer, confirmShot, assistPending, foulPending, ftModal, subModal, running, activeTeam, game]);
 
   // ── Ações miscellâneas ─────────────────────────────────────────────────────
   const applyMisc = useCallback(action => {
@@ -916,7 +1052,21 @@ export default function App() {
           onCancel={() => { setFtModal(null); setFtPlayer(null); }}
         />
       )}
-      {subModal && (
+      {subModal && subModal.directInIdx !== undefined && (
+        <div className="confirm-overlay">
+          <div className="confirm-modal">
+            <div className="confirm-title">Confirmar substituição?</div>
+            <div className="ft-player-label">
+              #{td.players[subModal.outIdx]?.number} {td.players[subModal.outIdx]?.name.split(' ')[0]} → #{td.players[subModal.directInIdx]?.number} {td.players[subModal.directInIdx]?.name.split(' ')[0]}
+            </div>
+            <div className="confirm-btns">
+              <button className="confirm-btn made" onClick={() => executeDirectSub(subModal.outIdx, subModal.directInIdx)}>Confirmar</button>
+              <button className="confirm-btn missed" onClick={() => setSubModal(null)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {subModal && subModal.directInIdx === undefined && (
         <SubModal
           title="Substituição"
           reason={subModal.reason}
@@ -936,6 +1086,7 @@ export default function App() {
           <div className="export-btns">
             <button className="export-btn-sm" onClick={() => exportStatsCSV(game)}>Stats</button>
             <button className="export-btn-sm green" onClick={() => exportShotsCSV(game)}>Arrem.</button>
+            <button className="export-btn-sm" style={{color:'var(--blue)'}} onClick={() => exportLogCSV(game)}>Log</button>
           </div>
         </div>
 
@@ -959,8 +1110,20 @@ export default function App() {
             <div className="clock-btns">
               <button onClick={() => setRunning(r=>!r)}>{running ? '⏸' : '▶'}</button>
               <button onClick={() => setGame(g=>({...g,clock:game.quarter===4?300:600}))}>↺</button>
-              <button className="next-q-btn" onClick={nextQuarter}>
-                ›{getQuarterLabel(game.quarter + 1)}
+              <button className="next-q-btn"
+                data-finished={game.quarter >= 3 && game.teams[0].score !== game.teams[1].score}
+                onClick={() => {
+                  // Após 4T ou qualquer OT: só avança se empatado
+                  if (game.quarter >= 3) {
+                    const [s0, s1] = [game.teams[0].score, game.teams[1].score];
+                    if (s0 !== s1) {
+                      setGame(g => ({ ...g, finished: true }));
+                      return;
+                    }
+                  }
+                  nextQuarter();
+                }}>
+                {game.quarter >= 3 && game.teams[0].score !== game.teams[1].score ? 'Finalizar' : `›${getQuarterLabel(game.quarter + 1)}`}
               </button>
             </div>
           </div>
@@ -986,12 +1149,32 @@ export default function App() {
         )}
 
         <nav className="nav">
-          {[['scout','Scout'],['stats','Stats'],['log','Log']].map(([v,l])=>(
+          {[['scout','Scout'],['stats','Stats'],['heatmap','Mapa'],['log','Log']].map(([v,l])=>(
             <button key={v} className="nav-btn" data-active={view===v}
               onClick={() => { setView(v); }}>{l}</button>
           ))}
         </nav>
       </header>
+
+      {/* ── Banner Jogo Finalizado ── */}
+      {game.finished && (() => {
+        const [s0, s1] = [game.teams[0].score, game.teams[1].score];
+        const winner = s0 > s1 ? game.teams[0].name : game.teams[1].name;
+        const loser  = s0 > s1 ? game.teams[1].name : game.teams[0].name;
+        const ws = s0 > s1 ? s0 : s1;
+        const ls = s0 > s1 ? s1 : s0;
+        return (
+          <div className="game-over-banner">
+            <div className="game-over-title">Jogo Finalizado</div>
+            <div className="game-over-winner">{winner}</div>
+            <div className="game-over-score">{ws} — {ls}</div>
+            <div className="game-over-loser">{loser}</div>
+            <button className="game-over-reset" onClick={() => setGame(g => ({ ...g, finished: false }))}>
+              Continuar editando
+            </button>
+          </div>
+        );
+      })()}
 
       {/* ── SCOUT ── */}
       {view==='scout' && (
@@ -1023,7 +1206,23 @@ export default function App() {
                   data-bench={!p.active}
                   data-trouble={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY}
                   data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}
-                  onClick={() => setSelectedPlayer(pi)}>
+                  data-drag-over={dragPlayer !== null && dragPlayer !== pi &&
+                    ((td.players[dragPlayer]?.active && !p.active) || (!td.players[dragPlayer]?.active && p.active))}
+                  onClick={() => setSelectedPlayer(pi)}
+                  draggable
+                  onDragStart={() => setDragPlayer(pi)}
+                  onDragEnd={() => setDragPlayer(null)}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={() => {
+                    if (dragPlayer === null || dragPlayer === pi) return;
+                    const src = td.players[dragPlayer];
+                    const dst = td.players[pi];
+                    if (src.active === dst.active) { showToast('Arraste em quadra → reserva'); setDragPlayer(null); return; }
+                    const outIdx = src.active ? dragPlayer : pi;
+                    const inIdx  = src.active ? pi : dragPlayer;
+                    setSubModal({ reason: null, outIdx, directInIdx: inIdx, canCancel: true });
+                    setDragPlayer(null);
+                  }}>
                   <span className="pnum">#{p.number}</span>
                   <span className="pname">{p.name.split(' ')[0]}</span>
                   <span className="ppts">{p.pts}p</span>
@@ -1157,7 +1356,7 @@ export default function App() {
                 {active.length>0 && (
                   <div className="table-wrap">
                     <table className="stats-table">
-                      <thead><tr><th>Atleta</th><th>PTS</th><th>AST</th><th>REB</th><th>STL</th><th>BLK</th><th>TO</th><th>FG%</th><th>3P%</th><th>LL%</th><th>FL</th><th>+/-</th><th>PIR</th></tr></thead>
+                      <thead><tr><th>Atleta</th><th>PTS</th><th>AST</th><th>REB</th><th>STL</th><th>BLK</th><th>TO</th><th>2P</th><th>FG%</th><th>3P</th><th>3P%</th><th>LL</th><th>LL%</th><th>FL</th><th>+/-</th><th>PIR</th></tr></thead>
                       <tbody>
                         {active.map(p=>(
                           <tr key={p.id} data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}>
@@ -1169,8 +1368,11 @@ export default function App() {
                             <td>{p.ast}</td><td>{p.reb+p.oreb}</td>
                             <td>{p.stl}</td><td>{p.blk}</td>
                             <td data-warn={p.to>2}>{p.to}</td>
-                            <td>{pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)}</td>
+                            <td className="shot-cell">{p.fg2m}/{p.fg2a}</td>
+                            <td>{pct(p.fg2m,p.fg2a)}</td>
+                            <td className="shot-cell">{p.fg3m}/{p.fg3a}</td>
                             <td>{pct(p.fg3m,p.fg3a)}</td>
+                            <td className="shot-cell">{p.ftm}/{p.fta}</td>
                             <td>{pct(p.ftm,p.fta)}</td>
                             <td data-warn={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY} data-danger={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}>{p.fouls}{p.techFouls>0?`+${p.techFouls}t`:''}</td>
                             <td className={(p.plusMinus||0)>0?'pm-pos':(p.plusMinus||0)<0?'pm-neg':''}>{(p.plusMinus||0)>=0?`+${p.plusMinus||0}`:p.plusMinus||0}</td>
@@ -1183,8 +1385,11 @@ export default function App() {
                           <td>Time</td><td className="pts-cell">{tot.pts}</td>
                           <td>{tot.ast}</td><td>{tot.reb+tot.oreb}</td>
                           <td>{tot.stl}</td><td>{tot.blk}</td><td>{tot.to}</td>
-                          <td>{pct(tot.fg2m+tot.fg3m,tot.fg2a+tot.fg3a)}</td>
+                          <td className="shot-cell">{tot.fg2m}/{tot.fg2a}</td>
+                          <td>{pct(tot.fg2m,tot.fg2a)}</td>
+                          <td className="shot-cell">{tot.fg3m}/{tot.fg3a}</td>
                           <td>{pct(tot.fg3m,tot.fg3a)}</td>
+                          <td className="shot-cell">{tot.ftm}/{tot.fta}</td>
                           <td>{pct(tot.ftm,tot.fta)}</td>
                           <td>{tot.fouls}</td>
                           <td></td>
@@ -1197,6 +1402,20 @@ export default function App() {
               </div>
             );
           })}
+        </main>
+      )}
+
+      {/* ── HEATMAP ── */}
+      {view==='heatmap' && (
+        <main className="heatmap-view">
+          {game.teams.map((team, ti) => (
+            <HeatMap
+              key={ti}
+              shots={team.players.flatMap(p => p.shots||[])}
+              teamName={team.name}
+              attackDir={ti === 0 ? 'right' : 'left'}
+            />
+          ))}
         </main>
       )}
 
