@@ -13,7 +13,7 @@ const TECH_DISQUALIFY = 2;   // técnicas/antidesportivas para substituição ob
 const INITIAL_PLAYER = () => ({
   pts: 0, ast: 0, reb: 0, oreb: 0, stl: 0, blk: 0, to: 0,
   fg2a: 0, fg2m: 0, fg3a: 0, fg3m: 0, fta: 0, ftm: 0,
-  fouls: 0, techFouls: 0,
+  fouls: 0, techFouls: 0, foulsReceived: 0,
   plusMinus: 0,
   shots: [],
 });
@@ -53,12 +53,13 @@ const newGame = (nameA='Time A', nameB='Time B', rosterA=DEFAULT_TEAM_A, rosterB
 });
 
 const MISC_ACTIONS = [
-  { id:'reb',  label:'Rebote',   pts:0, color:'#06b6d4' },
-  { id:'oreb', label:'Reb.Of.',  pts:0, color:'#0891b2' },
-  { id:'stl',  label:'Roubo',    pts:0, color:'#10b981' },
-  { id:'blk',  label:'Toco',     pts:0, color:'#8b5cf6' },
-  { id:'to',   label:'Turnov.',  pts:0, color:'#ef4444' },
-  { id:'fouls',label:'Falta',    pts:0, color:'#f97316' },
+  { id:'reb',          label:'Rebote',        pts:0, color:'#06b6d4' },
+  { id:'oreb',         label:'Reb.Of.',       pts:0, color:'#0891b2' },
+  { id:'stl',          label:'Roubo',         pts:0, color:'#10b981' },
+  { id:'blk',          label:'Toco',          pts:0, color:'#8b5cf6' },
+  { id:'to',           label:'Turnov.',       pts:0, color:'#ef4444' },
+  { id:'fouls',        label:'Falta',         pts:0, color:'#f97316' },
+  { id:'foulsReceived',label:'Falta Sofrida', pts:0, color:'#c084fc' },
 ];
 
 const FT_ACTIONS = [
@@ -69,8 +70,8 @@ const FT_ACTIONS = [
 const fmtTime = s => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
 const pct = (m,a) => a===0 ? '—' : `${Math.round(m/a*100)}%`;
 const totals = team => team.players.reduce((acc, p) => {
-  ['pts','ast','reb','oreb','stl','blk','to','fg2m','fg2a','fg3m','fg3a','ftm','fta','fouls']
-    .forEach(k => acc[k] = (acc[k]||0) + p[k]);
+  ['pts','ast','reb','oreb','stl','blk','to','fg2m','fg2a','fg3m','fg3a','ftm','fta','fouls','foulsReceived']
+    .forEach(k => acc[k] = (acc[k]||0) + (p[k]||0));
   return acc;
 }, {});
 
@@ -82,11 +83,11 @@ function dl(content, filename) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = filename; a.click();
 }
 function exportStatsCSV(game) {
-  const lines = ['Atleta,Time,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG3M,FG3A,FTM,FTA,FG%,3P%,LL%,FALTAS,+/-,PIR'];
+  const lines = ['Atleta,Time,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG%,FG3M,FG3A,3P%,FTM,FTA,LL%,FALTAS,FALTAS.SOF,+/-,PIR'];
   game.teams.forEach(t => {
     t.players.forEach(p => {
       const pm = (p.plusMinus||0) >= 0 ? `+${p.plusMinus||0}` : `${p.plusMinus||0}`;
-      lines.push(`"#${p.number} ${p.name}","${t.name}",${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${p.fg3m},${p.fg3a},${p.ftm},${p.fta},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${pct(p.fg3m,p.fg3a)},${pct(p.ftm,p.fta)},${p.fouls},${pm},${calcPIR(p)}`);
+      lines.push(`"#${p.number} ${p.name}","${t.name}",${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${p.fg3m},${p.fg3a},${pct(p.fg3m,p.fg3a)},${p.ftm},${p.fta},${pct(p.ftm,p.fta)},${p.fouls},${p.foulsReceived||0},${pm},${calcPIR(p)}`);
     });
     const tot = totals(t);
     lines.push(`"TOTAL","${t.name}",${tot.pts},${tot.ast},${tot.reb},${tot.oreb},${tot.stl},${tot.blk},${tot.to},${tot.fg2m},${tot.fg2a},${tot.fg3m},${tot.fg3a},${tot.ftm},${tot.fta},${pct(tot.fg2m+tot.fg3m,tot.fg2a+tot.fg3a)},${pct(tot.fg3m,tot.fg3a)},${pct(tot.ftm,tot.fta)},${tot.fouls},,`);
@@ -132,30 +133,39 @@ function classifyShot(xPct, yPct, attackDir) {
   const W = 600, H = 320, cy = 160;
   const cx1 = 34,  cx2 = 566;
   const arcR = 145;
-  const arcX1 = 67, arcX2 = 533;
+  // latY define onde as retas laterais de 3pts terminam (90cm das linhas laterais)
   const latY1 = 19, latY2 = 301;
+  // latX: onde a linha lateral de 3pts encontra a linha de fundo (x da borda)
+  // A linha lateral vai DA linha de fundo ATÉ onde o arco começa
+  // Corredor lateral = APENAS a faixa x<=(borda+2), latY1<=y<=latY2
+  // Não existe corredor lateral interno — a reta vai da borda até o arco
   const midX = W / 2;
+  const BORDER = 2; // borda da quadra em px
 
   const px = xPct * W / 100;
   const py = yPct * H / 100;
 
   if (attackDir === 'right') {
-    // Cesta de ataque = direita (cx2)
-    // Lado defensivo (metade esquerda) = sempre 3pts
-    if (px < midX) return { valid: true, three: true };
-    // Lado ofensivo (metade direita): classifica pela linha de 3pts
+    // Lado defensivo: sempre 3pts
+    if (px <= midX) return { valid: true, three: true };
+    // Lado ofensivo (metade direita) — cesta = cx2=566
     const d = Math.sqrt((px - cx2) ** 2 + (py - cy) ** 2);
-    if (py < latY1 || py > latY2) return { valid: true, three: true };  // corner
-    if (px >= arcX2) return { valid: true, three: true };                // corredor lateral dir
+    // Cantos além da linha lateral
+    if (py <= latY1 || py >= latY2) return { valid: true, three: true };
+    // Corredor lateral dir: apenas na borda (x próximo de 598=W-2)
+    if (px >= W - BORDER - 1) return { valid: true, three: true };
+    // Classifica pelo arco
     return { valid: true, three: d > arcR };
   } else {
-    // Cesta de ataque = esquerda (cx1)
-    // Lado defensivo (metade direita) = sempre 3pts
-    if (px > midX) return { valid: true, three: true };
-    // Lado ofensivo (metade esquerda): classifica pela linha de 3pts
+    // Lado defensivo: sempre 3pts
+    if (px >= midX) return { valid: true, three: true };
+    // Lado ofensivo (metade esquerda) — cesta = cx1=34
     const d = Math.sqrt((px - cx1) ** 2 + (py - cy) ** 2);
-    if (py < latY1 || py > latY2) return { valid: true, three: true };  // corner
-    if (px <= arcX1) return { valid: true, three: true };                // corredor lateral esq
+    // Cantos além da linha lateral
+    if (py <= latY1 || py >= latY2) return { valid: true, three: true };
+    // Corredor lateral esq: apenas na borda (x próximo de 2)
+    if (px <= BORDER + 1) return { valid: true, three: true };
+    // Classifica pelo arco
     return { valid: true, three: d > arcR };
   }
 }
@@ -473,42 +483,65 @@ function SubModal({ title, reason, players, outPlayerIdx, onSub, onCancel, canCa
 // ─── HeatMap Component ───────────────────────────────────────────────────────
 function HeatMap({ shots, teamName, attackDir }) {
   const W = 600, H = 320, cy = 160, midX = 300;
-  const CELL = 30; // tamanho das células do grid
+  // Mapa de calor: cada arremesso contribui com um "blob" gaussiano
+  // Renderizado como círculos concêntricos com opacidade decrescente
+  const RADIUS = 38; // raio de influência de cada arremesso em px
 
-  // Monta grid de frequência
-  const grid = {};
+  // Agrupa arremessos por posição real (sem grid)
+  // Usa clustering simples: pontos dentro de RADIUS/2 são agrupados
+  const clusters = [];
   shots.forEach(s => {
-    const gx = Math.floor(s.x * W / 100 / CELL);
-    const gy = Math.floor(s.y * H / 100 / CELL);
-    const key = `${gx},${gy}`;
-    if (!grid[key]) grid[key] = { made: 0, total: 0 };
-    grid[key].total++;
-    if (s.made) grid[key].made++;
+    const sx = s.x * W / 100;
+    const sy = s.y * H / 100;
+    const existing = clusters.find(cl =>
+      Math.sqrt((cl.cx - sx)**2 + (cl.cy - sy)**2) < RADIUS * 0.7
+    );
+    if (existing) {
+      existing.cx = (existing.cx * existing.total + sx) / (existing.total + 1);
+      existing.cy = (existing.cy * existing.total + sy) / (existing.total + 1);
+      existing.total++;
+      if (s.made) existing.made++;
+    } else {
+      clusters.push({ cx: sx, cy: sy, total: 1, made: s.made ? 1 : 0 });
+    }
   });
 
-  const maxTotal = Math.max(...Object.values(grid).map(v => v.total), 1);
+  const maxTotal = Math.max(...clusters.map(cl => cl.total), 1);
+
+  // Interpola cor entre vermelho (0%) → laranja (50%) → verde (100%) de aproveitamento
+  const shotColor = (pctMade) => {
+    if (pctMade < 0.35) return { r: 239, g: 68,  b: 68  }; // vermelho
+    if (pctMade < 0.5)  return { r: 249, g: 115, b: 22  }; // laranja
+    if (pctMade < 0.65) return { r: 234, g: 179, b: 8   }; // amarelo
+    return                     { r: 34,  g: 197, b: 94  }; // verde
+  };
 
   return (
     <div className="heatmap-wrap">
       <div className="heatmap-title">{teamName} — {shots.length} arremessos</div>
       <svg viewBox={`0 0 ${W} ${H}`} className="court-svg">
+        <defs>
+          {clusters.map((cl, i) => {
+            const col = shotColor(cl.made / cl.total);
+            const intensity = cl.total / maxTotal;
+            return (
+              <radialGradient key={i} id={`hg${i}`} cx="50%" cy="50%" r="50%">
+                <stop offset="0%"   stopColor={`rgb(${col.r},${col.g},${col.b})`} stopOpacity={0.55 * intensity}/>
+                <stop offset="45%"  stopColor={`rgb(${col.r},${col.g},${col.b})`} stopOpacity={0.3 * intensity}/>
+                <stop offset="100%" stopColor={`rgb(${col.r},${col.g},${col.b})`} stopOpacity={0}/>
+              </radialGradient>
+            );
+          })}
+        </defs>
         <rect x="0" y="0" width={W} height={H} fill="#1a1f2a"/>
 
-        {/* Células do heatmap */}
-        {Object.entries(grid).map(([key, val]) => {
-          const [gx, gy] = key.split(',').map(Number);
-          const intensity = val.total / maxTotal;
-          const pctMade = val.made / val.total;
-          // Verde se bom aproveitamento, vermelho se ruim, laranja intermediário
-          const r = pctMade < 0.4 ? 239 : pctMade < 0.6 ? 249 : 34;
-          const g2 = pctMade < 0.4 ? 68  : pctMade < 0.6 ? 115 : 197;
-          const b = pctMade < 0.4 ? 68  : pctMade < 0.6 ? 22  : 94;
+        {/* Blobs de calor — círculos com gradiente radial suave */}
+        {clusters.map((cl, i) => {
+          const r = RADIUS * (0.8 + (cl.total / maxTotal) * 0.6);
           return (
-            <rect key={key}
-              x={gx * CELL} y={gy * CELL}
-              width={CELL} height={CELL}
-              fill={`rgb(${r},${g2},${b})`}
-              opacity={0.15 + intensity * 0.7}
+            <circle key={i}
+              cx={cl.cx} cy={cl.cy} r={r}
+              fill={`url(#hg${i})`}
             />
           );
         })}
@@ -632,6 +665,8 @@ export default function App() {
   const [subModal, setSubModal]           = useState(null);
   // drag & drop substituição
   const [dragPlayer, setDragPlayer]       = useState(null);
+  // Undo: guarda até 5 estados anteriores do jogo
+  const undoStack = useRef([]);
 
   const courtRef = useRef(null);
 
@@ -656,6 +691,24 @@ export default function App() {
   }, [game]);
 
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 1800); };
+
+  // setGameWithUndo: salva snapshot antes de aplicar mudança
+  const setGameWithUndo = useCallback((updater) => {
+    setGame(prev => {
+      if (prev) {
+        undoStack.current = [prev, ...undoStack.current].slice(0, 8);
+      }
+      return typeof updater === 'function' ? updater(prev) : updater;
+    });
+  }, []);
+
+  const undoLastAction = useCallback(() => {
+    if (undoStack.current.length === 0) { showToast('Nada para desfazer'); return; }
+    const prev = undoStack.current[0];
+    undoStack.current = undoStack.current.slice(1);
+    setGame(prev);
+    showToast('Ação desfeita');
+  }, []);
 
   const startGame = (nameA, nameB, rosterA, rosterB) => {
     setGame(newGame(nameA, nameB, rosterA, rosterB));
@@ -759,7 +812,7 @@ export default function App() {
     const newTfq = (game.teamFouls?.[activeTeam]?.[game.quarter] || 0) + 1;
     const nowBonus = newTfq >= TEAM_FOUL_BONUS;
 
-    setGame(g => {
+    setGameWithUndo(g => {
       const teamFouls = (g.teamFouls || [[0,0,0,0,0],[0,0,0,0,0]]).map((tf, ti) => {
         if (ti !== activeTeam) return tf;
         const arr = [...tf];
@@ -797,7 +850,7 @@ export default function App() {
     } else if (newFouls >= FOUL_TROUBLE) {
       showToast(`Foul trouble — ${pl.name.split(' ')[0]} (${newFouls} faltas)`);
     }
-  }, [selectedPlayer, activeTeam, game]);
+  }, [selectedPlayer, activeTeam, game, setGameWithUndo]);
 
   // ── Lance Livre ────────────────────────────────────────────────────────────
   // ftTeamIdx: time que ARREMESSA (adversário de quem fez a falta)
@@ -806,7 +859,7 @@ export default function App() {
     const pl = game.teams[ftTeamIdx].players[playerIdx];
     const scoringTeam = ftTeamIdx;
     const opposingTeam = 1 - ftTeamIdx;
-    setGame(g => {
+    setGameWithUndo(g => {
       const teams = g.teams.map((t, ti) => {
         if (ti === scoringTeam) {
           return {
@@ -837,7 +890,7 @@ export default function App() {
       return { ...g, teams, log: [entry, ...g.log] };
     });
     if (made) showToast(`+1 LL — ${pl.name.split(' ')[0]}`);
-  }, [game]);
+  }, [game, setGameWithUndo]);
 
   // ── Registra arremesso com assistência ────────────────────────────────────
   const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx) => {
@@ -845,7 +898,7 @@ export default function App() {
     const actionId = made ? (three?'fg3m':'fg2m') : (three?'fg3miss':'fg2miss');
     const col = made ? (three?'#3b82f6':'#22c55e') : '#475569';
 
-    setGame(g => {
+    setGameWithUndo(g => {
       const teams = g.teams.map((t, ti) => {
         const players = t.players.map((p, pi) => {
           const n = { ...p };
@@ -888,7 +941,7 @@ export default function App() {
       return { ...g, teams, log: [...entries, ...g.log] };
     });
     if (made) showToast(`+${pts}${assistIdx !== null ? ' + assist' : ''}`);
-    setAssistPending(null); }, [activeTeam]);
+    setAssistPending(null); }, [activeTeam, setGameWithUndo]);
 
   // ── Clique na quadra ───────────────────────────────────────────────────────
   // Sempre ativo quando há atleta selecionado — não precisa clicar em "+ Marcar"
@@ -912,7 +965,7 @@ export default function App() {
   const applyMisc = useCallback(action => {
     if (selectedPlayer === null) { showToast('Selecione um atleta'); return; }
     if (action.id === 'fouls') { setFoulPending(true); return; }
-    setGame(g => {
+    setGameWithUndo(g => {
       const teams = g.teams.map((t, ti) => {
         if (ti !== activeTeam) return t;
         return { ...t, players: t.players.map((p, pi) => {
@@ -926,7 +979,7 @@ export default function App() {
         action: action.label, pts: 0, color: action.color };
       return { ...g, teams, log: [entry, ...g.log] };
     });
-  }, [selectedPlayer, activeTeam]);
+  }, [selectedPlayer, activeTeam, setGameWithUndo]);
 
   const applyFT = useCallback(action => {
     if (selectedPlayer === null) { showToast('Selecione um atleta'); return; }
@@ -1191,13 +1244,18 @@ export default function App() {
           <section className="players-section">
             <div className="section-label-row">
               <span className="section-label" style={{padding:0}}>Atleta</span>
-              <button className="sub-quick-btn"
-                onClick={() => {
-                  if (selectedPlayer === null) { showToast('Selecione o atleta que SAI'); return; }
-                  setSubModal({ reason: null, outIdx: selectedPlayer, canCancel: true });
-                }}>
-                ↕ Substituição
-              </button>
+              <div style={{display:'flex',gap:'6px'}}>
+                <button className="undo-btn" onClick={undoLastAction} title="Desfazer última ação">
+                  ↩ Desfazer
+                </button>
+                <button className="sub-quick-btn"
+                  onClick={() => {
+                    if (selectedPlayer === null) { showToast('Selecione o atleta que SAI'); return; }
+                    setSubModal({ reason: null, outIdx: selectedPlayer, canCancel: true });
+                  }}>
+                  ↕ Sub
+                </button>
+              </div>
             </div>
             <div className="players-grid">
               {td.players.map((p,pi)=>(
@@ -1242,7 +1300,7 @@ export default function App() {
             <div className="selected-bar">
               <span className="sel-badge">#{sp.number} {sp.name}</span>
               <div className="sel-mini-stats">
-                {[['PTS',sp.pts],['AST',sp.ast],['REB',sp.reb+sp.oreb],['STL',sp.stl],['TO',sp.to]].map(([k,v])=>(
+                {[['PTS',sp.pts],['AST',sp.ast],['REB',sp.reb],['RO',sp.oreb],['STL',sp.stl],['TO',sp.to]].map(([k,v])=>(
                   <span key={k} className="mini-stat" data-warn={k==='TO'&&v>2}><b>{v}</b>{k}</span>
                 ))}
                 <span className="mini-stat" data-warn={sp.fouls>=FOUL_TROUBLE} data-danger={sp.fouls>=FOUL_DISQUALIFY}>
@@ -1356,7 +1414,7 @@ export default function App() {
                 {active.length>0 && (
                   <div className="table-wrap">
                     <table className="stats-table">
-                      <thead><tr><th>Atleta</th><th>PTS</th><th>AST</th><th>REB</th><th>STL</th><th>BLK</th><th>TO</th><th>2P</th><th>FG%</th><th>3P</th><th>3P%</th><th>LL</th><th>LL%</th><th>FL</th><th>+/-</th><th>PIR</th></tr></thead>
+                      <thead><tr><th>Atleta</th><th>PTS</th><th>AST</th><th>REB</th><th>RO</th><th>STL</th><th>BLK</th><th>TO</th><th>2P</th><th>FG%</th><th>3P</th><th>3P%</th><th>LL</th><th>LL%</th><th>FL</th><th>FS</th><th>+/-</th><th>PIR</th></tr></thead>
                       <tbody>
                         {active.map(p=>(
                           <tr key={p.id} data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}>
@@ -1365,7 +1423,7 @@ export default function App() {
                               {(p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY) && <span className="disq-tag">DQ</span>}
                             </td>
                             <td className="pts-cell">{p.pts}</td>
-                            <td>{p.ast}</td><td>{p.reb+p.oreb}</td>
+                            <td>{p.ast}</td><td>{p.reb}</td><td>{p.oreb}</td>
                             <td>{p.stl}</td><td>{p.blk}</td>
                             <td data-warn={p.to>2}>{p.to}</td>
                             <td className="shot-cell">{p.fg2m}/{p.fg2a}</td>
@@ -1375,6 +1433,7 @@ export default function App() {
                             <td className="shot-cell">{p.ftm}/{p.fta}</td>
                             <td>{pct(p.ftm,p.fta)}</td>
                             <td data-warn={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY} data-danger={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}>{p.fouls}{p.techFouls>0?`+${p.techFouls}t`:''}</td>
+                            <td style={{color:'var(--blue)'}}>{p.foulsReceived||0}</td>
                             <td className={(p.plusMinus||0)>0?'pm-pos':(p.plusMinus||0)<0?'pm-neg':''}>{(p.plusMinus||0)>=0?`+${p.plusMinus||0}`:p.plusMinus||0}</td>
                             <td className={calcPIR(p)>0?'pm-pos':calcPIR(p)<0?'pm-neg':''}>{calcPIR(p)}</td>
                           </tr>
@@ -1383,7 +1442,7 @@ export default function App() {
                       <tfoot>
                         <tr>
                           <td>Time</td><td className="pts-cell">{tot.pts}</td>
-                          <td>{tot.ast}</td><td>{tot.reb+tot.oreb}</td>
+                          <td>{tot.ast}</td><td>{tot.reb}</td><td>{tot.oreb}</td>
                           <td>{tot.stl}</td><td>{tot.blk}</td><td>{tot.to}</td>
                           <td className="shot-cell">{tot.fg2m}/{tot.fg2a}</td>
                           <td>{pct(tot.fg2m,tot.fg2a)}</td>
@@ -1392,6 +1451,7 @@ export default function App() {
                           <td className="shot-cell">{tot.ftm}/{tot.fta}</td>
                           <td>{pct(tot.ftm,tot.fta)}</td>
                           <td>{tot.fouls}</td>
+                          <td></td>
                           <td></td>
                           <td></td>
                         </tr>

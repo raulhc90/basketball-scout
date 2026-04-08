@@ -888,3 +888,27 @@ tr[data-disq=true] { opacity:.6; }
   background: rgba(249,115,22,.18) !important;
   transform: scale(1.04);
 }
+
+/* ── Botão Desfazer ── */
+.undo-btn {
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--fd);
+  font-size: 12px; font-weight: 700;
+  letter-spacing: .04em;
+  padding: 5px 10px; border-radius: 5px;
+  cursor: pointer; white-space: nowrap;
+  transition: all .12s;
+}
+.undo-btn:active {
+  background: rgba(239,68,68,.15);
+  border-color: var(--red);
+  color: var(--red);
+}
+
+/* ── Falta Sofrida badge ── */
+.foul-received-cell { color: #c084fc; font-weight: 600; }
+
+/* ── Heatmap blobs (sem borda quadrada) ── */
+.heatmap-wrap svg { overflow: visible; }
