@@ -15,6 +15,8 @@ const INITIAL_PLAYER = () => ({
   fg2a: 0, fg2m: 0, fg3a: 0, fg3m: 0, fta: 0, ftm: 0,
   fouls: 0, techFouls: 0, foulsReceived: 0,
   plusMinus: 0,
+  timeOnCourt: 0,   // segundos em quadra
+  entryTime: null,  // clock quando entrou em quadra (null = não está)
   shots: [],
 });
 
@@ -40,7 +42,10 @@ const DEFAULT_TEAM_B = [
 
 const mkTeam = (name, roster) => ({
   name, score: 0,
-  players: roster.map((p, i) => ({ id: i+1, ...p, active: i < 5, ...INITIAL_PLAYER() }))
+  players: roster.map((p, i) => ({
+    id: i+1, ...p, active: i < 5, ...INITIAL_PLAYER(),
+    // Titulares começam com entryTime = null (começa quando clock inicia)
+  }))
 });
 
 const newGame = (nameA='Time A', nameB='Time B', rosterA=DEFAULT_TEAM_A, rosterB=DEFAULT_TEAM_B) => ({
@@ -50,6 +55,7 @@ const newGame = (nameA='Time A', nameB='Time B', rosterA=DEFAULT_TEAM_A, rosterB
   teams: [mkTeam(nameA, rosterA), mkTeam(nameB, rosterB)],
   quarter: 0, clock: 600, log: [], finished: false,
   teamFouls: [[0,0,0,0,0],[0,0,0,0,0]],
+  possessions: [0, 0],  // posses por time
 });
 
 const MISC_ACTIONS = [
@@ -60,6 +66,7 @@ const MISC_ACTIONS = [
   { id:'to',           label:'Turnov.',       pts:0, color:'#ef4444' },
   { id:'fouls',        label:'Falta',         pts:0, color:'#f97316' },
   { id:'foulsReceived',label:'Falta Sofrida', pts:0, color:'#c084fc' },
+  { id:'posse',        label:'Posse',         pts:0, color:'#64748b', isPosse: true },
 ];
 
 const FT_ACTIONS = [
@@ -68,7 +75,7 @@ const FT_ACTIONS = [
 ];
 
 const fmtTime = s => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
-const pct = (m,a) => a===0 ? '—' : `${Math.round(m/a*100)}%`;
+const pct = (m,a) => { if (!a || a===0) return '—'; const v = m/a*100; return `${Math.round(v)}%`; };
 const totals = team => team.players.reduce((acc, p) => {
   ['pts','ast','reb','oreb','stl','blk','to','fg2m','fg2a','fg3m','fg3a','ftm','fta','fouls','foulsReceived']
     .forEach(k => acc[k] = (acc[k]||0) + (p[k]||0));
@@ -83,11 +90,12 @@ function dl(content, filename) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = filename; a.click();
 }
 function exportStatsCSV(game) {
-  const lines = ['Atleta,Time,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG%,FG3M,FG3A,3P%,FTM,FTA,LL%,FALTAS,FALTAS.SOF,+/-,PIR'];
+  const lines = ['Atleta,Time,MIN,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG%,FG3M,FG3A,3P%,FTM,FTA,LL%,FALTAS,FALTAS.SOF,+/-,PIR'];
   game.teams.forEach(t => {
     t.players.forEach(p => {
       const pm = (p.plusMinus||0) >= 0 ? `+${p.plusMinus||0}` : `${p.plusMinus||0}`;
-      lines.push(`"#${p.number} ${p.name}","${t.name}",${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${p.fg3m},${p.fg3a},${pct(p.fg3m,p.fg3a)},${p.ftm},${p.fta},${pct(p.ftm,p.fta)},${p.fouls},${p.foulsReceived||0},${pm},${calcPIR(p)}`);
+      const min = `${Math.floor((p.timeOnCourt||0)/60)}:${String(Math.round((p.timeOnCourt||0)%60)).padStart(2,'0')}`;
+      lines.push(`"#${p.number} ${p.name}","${t.name}",${min},${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${p.fg3m},${p.fg3a},${pct(p.fg3m,p.fg3a)},${p.ftm},${p.fta},${pct(p.ftm,p.fta)},${p.fouls},${p.foulsReceived||0},${pm},${calcPIR(p)}`);
     });
     const tot = totals(t);
     lines.push(`"TOTAL","${t.name}",${tot.pts},${tot.ast},${tot.reb},${tot.oreb},${tot.stl},${tot.blk},${tot.to},${tot.fg2m},${tot.fg2a},${tot.fg3m},${tot.fg3a},${tot.ftm},${tot.fta},${pct(tot.fg2m+tot.fg3m,tot.fg2a+tot.fg3a)},${pct(tot.fg3m,tot.fg3a)},${pct(tot.ftm,tot.fta)},${tot.fouls},,`);
@@ -103,9 +111,9 @@ function exportLogCSV(game) {
 }
 
 function exportShotsCSV(game) {
-  const lines = ['Atleta,Time,Quarto,Tempo,X_pct,Y_pct,Convertido,Tipo,Assistencia'];
+  const lines = ['Atleta,Time,Quarto,Tempo,X_pct,Y_pct,Convertido,Tipo,Subtipo,Assistencia'];
   game.teams.forEach(t => t.players.forEach(p =>
-    (p.shots||[]).forEach(s => lines.push(`"#${p.number} ${p.name}","${t.name}","${s.q||''}","${s.time||''}",${s.x.toFixed(2)},${s.y.toFixed(2)},${s.made?'Sim':'Não'},${s.three?'3pts':'2pts'},"${s.assistedBy||''}"`))));
+    (p.shots||[]).forEach(s => lines.push(`"#${p.number} ${p.name}","${t.name}","${s.q||''}","${s.time||''}",${s.x.toFixed(2)},${s.y.toFixed(2)},${s.made?'Sim':'Não'},${s.three?'3pts':'2pts'},"${s.shotType||''}","${s.assistedBy||''}"`))));
   dl(lines.join('\n'), `arremessos_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
 
@@ -302,15 +310,35 @@ function BasketballCourt({ shots=[], onCourtClick, hasPlayer=false, attackDir='r
   );
 }
 
-// ─── Confirm Shot Modal (acerto/erro in-app, sem popup) ──────────────────────
+// ─── Confirm Shot Modal ──────────────────────────────────────────────────────
 function ConfirmShotModal({ three, onMade, onMissed, onCancel }) {
+  const [shotType, setShotType] = useState(null);
+
+  if (!three && shotType === null) {
+    // Para 2pts: primeiro escolhe o tipo
+    return (
+      <div className="confirm-overlay">
+        <div className="confirm-modal">
+          <div className="confirm-title">Tipo de arremesso</div>
+          <div className="confirm-btns" style={{flexDirection:'column',gap:'8px'}}>
+            <button className="confirm-btn shot-type" onClick={() => setShotType('Arremesso')}>Arremesso</button>
+            <button className="confirm-btn shot-type" onClick={() => setShotType('Bandeja')}>Bandeja</button>
+            <button className="confirm-btn shot-type" onClick={() => setShotType('Enterrada')}>Enterrada</button>
+          </div>
+          <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
+        </div>
+      </div>
+    );
+  }
+
+  const label = three ? '3 pontos' : `2pts — ${shotType}`;
   return (
     <div className="confirm-overlay">
       <div className="confirm-modal">
-        <div className="confirm-title">Arremesso de {three ? '3 pontos' : '2 pontos'}</div>
+        <div className="confirm-title">{label}</div>
         <div className="confirm-btns">
-          <button className="confirm-btn made" onClick={onMade}>Convertido</button>
-          <button className="confirm-btn missed" onClick={onMissed}>Errado</button>
+          <button className="confirm-btn made" onClick={() => onMade(shotType || '3pts')}>Convertido</button>
+          <button className="confirm-btn missed" onClick={() => onMissed(shotType || '3pts')}>Errado</button>
         </div>
         <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
       </div>
@@ -403,10 +431,11 @@ function FoulModal({ player, teamFoulsInQuarter, onType, onCancel }) {
   const bonus = teamFoulsInQuarter >= TEAM_FOUL_BONUS;
   const disq  = player.fouls >= FOUL_DISQUALIFY - 1;
   const types = [
-    { id:'pessoal',   label:'Falta Pessoal',  desc:'Contato durante jogo',   color:'#f97316', isTech: false },
-    { id:'tecnica',   label:'Falta Técnica',   desc:'Conduta antidesportiva', color:'#ef4444', isTech: true  },
-    { id:'flagrante', label:'Flagrante',        desc:'Contato excessivo',      color:'#dc2626', isTech: true  },
-    { id:'ofensiva',  label:'Ofensiva',          desc:'Carrinho / fora da área',color:'#fb923c', isTech: false },
+    { id:'pessoal',        label:'Falta Pessoal',    desc:'Contato durante jogo',    color:'#f97316', isTech: false },
+    { id:'tecnica',        label:'Falta Técnica',     desc:'Conduta antidesportiva',  color:'#ef4444', isTech: true  },
+    { id:'antidesportiva', label:'Antidesportiva',    desc:'Contato intencional/duro',color:'#be185d', isTech: true  },
+    { id:'flagrante',      label:'Flagrante',          desc:'Contato excessivo',       color:'#dc2626', isTech: true  },
+    { id:'ofensiva',       label:'Ofensiva',           desc:'Carrinho / fora da área', color:'#fb923c', isTech: false },
   ];
   return (
     <div className="assist-overlay">
@@ -680,6 +709,47 @@ export default function App() {
     return () => clearInterval(id);
   }, [running, game]);
 
+  // Minutagem: quando pausa, adiciona tempo jogado aos atletas ativos
+  useEffect(() => {
+    if (!game || running) return;
+    // running acabou de virar false — registra tempo acumulado
+    setGame(g => {
+      if (!g) return g;
+      const now = g.clock;
+      const teams = g.teams.map(t => ({
+        ...t,
+        players: t.players.map(p => {
+          if (!p.active || p.entryTime === null) return p;
+          const elapsed = p.entryTime - now; // clock decresce
+          return {
+            ...p,
+            timeOnCourt: (p.timeOnCourt||0) + Math.max(elapsed, 0),
+            entryTime: now,
+          };
+        })
+      }));
+      return { ...g, teams };
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running]);
+
+  // Minutagem: quando running inicia, registra entryTime dos ativos
+  useEffect(() => {
+    if (!game || !running) return;
+    setGame(g => {
+      if (!g) return g;
+      const teams = g.teams.map(t => ({
+        ...t,
+        players: t.players.map(p => ({
+          ...p,
+          entryTime: p.active && p.entryTime === null ? g.clock : p.entryTime,
+        }))
+      }));
+      return { ...g, teams };
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running]);
+
   // Auto-save
   useEffect(() => {
     if (!game) return;
@@ -716,7 +786,9 @@ export default function App() {
     setActiveTeam(0); setSelectedPlayer(null); setRunning(false); };
 
   const openGame = g => {
-    setGame(g); setScreen('game'); setView('scout');
+    // Compatibilidade: jogos antigos sem possessions
+    const patched = g.possessions ? g : { ...g, possessions: [0,0] };
+    setGame(patched); setScreen('game'); setView('scout');
     setActiveTeam(0); setSelectedPlayer(null); setRunning(false); };
 
   // Avança quarto — zera faltas coletivas (exceto OT que continua)
@@ -761,8 +833,15 @@ export default function App() {
         return {
           ...t,
           players: t.players.map((p, pi) => {
-            if (pi === outIdx) return { ...p, active: false };
-            if (pi === inIdx)  return { ...p, active: true  };
+            if (pi === outIdx) {
+              // Saindo: acumula tempo jogado
+              const elapsed = running && p.entryTime !== null ? p.entryTime - g.clock : 0;
+              return { ...p, active: false, entryTime: null, timeOnCourt: (p.timeOnCourt||0) + Math.max(elapsed,0) };
+            }
+            if (pi === inIdx) {
+              // Entrando: registra entryTime se cronômetro rodando
+              return { ...p, active: true, entryTime: running ? g.clock : null };
+            }
             return p;
           })
         };
@@ -773,6 +852,7 @@ export default function App() {
     showToast(`↕ ${out.name.split(' ')[0]} → ${inn.name.split(' ')[0]}`);
     setSubModal(null);
     setSelectedPlayer(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game, subModal, activeTeam]);
 
   // Drag-to-sub: confirma substituição direta (já sabe quem sai e entra)
@@ -893,7 +973,7 @@ export default function App() {
   }, [game, setGameWithUndo]);
 
   // ── Registra arremesso com assistência ────────────────────────────────────
-  const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx) => {
+  const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, shotType='Arremesso') => {
     const pts = made ? (three ? 3 : 2) : 0;
     const actionId = made ? (three?'fg3m':'fg2m') : (three?'fg3miss':'fg2miss');
     const col = made ? (three?'#3b82f6':'#22c55e') : '#475569';
@@ -914,6 +994,7 @@ export default function App() {
                 const apl = assistIdx !== null ? g.teams[activeTeam].players[assistIdx] : null;
                 n.shots = [...(n.shots||[]), {
                   x: xPct, y: yPct, made, three, zone: three?'3pts':'2pts',
+                shotType: three ? '3pts' : (shotType||'Arremesso'),
                   assistedBy: apl ? `#${apl.number} ${apl.name.split(' ')[0]}` : '',
                   q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
                 }];
@@ -965,6 +1046,19 @@ export default function App() {
   const applyMisc = useCallback(action => {
     if (selectedPlayer === null) { showToast('Selecione um atleta'); return; }
     if (action.id === 'fouls') { setFoulPending(true); return; }
+    if (action.id === 'posse') {
+      // Posse: incrementa contador do time, não do jogador
+      setGameWithUndo(g => {
+        const possessions = [...(g.possessions || [0,0])];
+        possessions[activeTeam] = (possessions[activeTeam]||0) + 1;
+        const pl = g.teams[activeTeam].players[selectedPlayer];
+        const entry = { id: Date.now(), q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
+          team: g.teams[activeTeam].name, player: `#${pl.number} ${pl.name.split(' ')[0]}`,
+          action: 'Posse', pts: 0, color: '#64748b' };
+        return { ...g, possessions, log: [entry, ...g.log] };
+      });
+      return;
+    }
     setGameWithUndo(g => {
       const teams = g.teams.map((t, ti) => {
         if (ti !== activeTeam) return t;
@@ -1046,13 +1140,13 @@ export default function App() {
       {confirmShot && (
         <ConfirmShotModal
           three={confirmShot.three}
-          onMade={() => {
-            setConfirmShot(null);
-            setAssistPending({ scorerIdx: selectedPlayer, xPct: confirmShot.xPct, yPct: confirmShot.yPct, made: true, three: confirmShot.three });
-          }}
-          onMissed={() => {
+          onMade={(shotType) => {
             const s = confirmShot; setConfirmShot(null);
-            commitShot(selectedPlayer, s.xPct, s.yPct, false, s.three, null);
+            setAssistPending({ scorerIdx: selectedPlayer, xPct: s.xPct, yPct: s.yPct, made: true, three: s.three, shotType });
+          }}
+          onMissed={(shotType) => {
+            const s = confirmShot; setConfirmShot(null);
+            commitShot(selectedPlayer, s.xPct, s.yPct, false, s.three, null, shotType);
           }}
           onCancel={() => setConfirmShot(null)}
         />
@@ -1060,8 +1154,8 @@ export default function App() {
       {assistPending && (
         <AssistModal
           players={td.players} scorerIdx={assistPending.scorerIdx}
-          onSelect={aIdx => commitShot(assistPending.scorerIdx, assistPending.xPct, assistPending.yPct, true, assistPending.three, aIdx)}
-          onNone={() => commitShot(assistPending.scorerIdx, assistPending.xPct, assistPending.yPct, true, assistPending.three, null)}
+          onSelect={aIdx => commitShot(assistPending.scorerIdx, assistPending.xPct, assistPending.yPct, true, assistPending.three, aIdx, assistPending.shotType)}
+          onNone={() => commitShot(assistPending.scorerIdx, assistPending.xPct, assistPending.yPct, true, assistPending.three, null, assistPending.shotType)}
           onCancel={() => setAssistPending(null)}
         />
       )}
@@ -1161,8 +1255,10 @@ export default function App() {
             <span className="quarter-label">{getQuarterLabel(game.quarter)}</span>
             <div className="clock">{fmtTime(game.clock)}</div>
             <div className="clock-btns">
-              <button onClick={() => setRunning(r=>!r)}>{running ? '⏸' : '▶'}</button>
-              <button onClick={() => setGame(g=>({...g,clock:game.quarter===4?300:600}))}>↺</button>
+              <button className={`clock-play-btn ${running ? 'playing' : 'paused'}`}
+                onClick={() => setRunning(r=>!r)}>
+                {running ? '⏸' : '▶'}
+              </button>
               <button className="next-q-btn"
                 data-finished={game.quarter >= 3 && game.teams[0].score !== game.teams[1].score}
                 onClick={() => {
@@ -1409,12 +1505,18 @@ export default function App() {
             );
             return (
               <div key={ti} className="stats-block">
-                <div className="stats-header"><span>{team.name}</span><span className="stats-total-score">{team.score} pts</span></div>
+                <div className="stats-header">
+                  <span>{team.name}</span>
+                  <div style={{display:'flex',gap:'16px',alignItems:'center'}}>
+                    <span className="stats-possessions">{(game.possessions||[0,0])[ti]||0} posses</span>
+                    <span className="stats-total-score">{team.score} pts</span>
+                  </div>
+                </div>
                 {active.length===0 && <div className="empty-stats">Sem dados ainda</div>}
                 {active.length>0 && (
                   <div className="table-wrap">
                     <table className="stats-table">
-                      <thead><tr><th>Atleta</th><th>PTS</th><th>AST</th><th>REB</th><th>RO</th><th>STL</th><th>BLK</th><th>TO</th><th>2P</th><th>FG%</th><th>3P</th><th>3P%</th><th>LL</th><th>LL%</th><th>FL</th><th>FS</th><th>+/-</th><th>PIR</th></tr></thead>
+                      <thead><tr><th>Atleta</th><th>MIN</th><th>PTS</th><th>AST</th><th>REB</th><th>RO</th><th>STL</th><th>BLK</th><th>TO</th><th>2P</th><th>FG%</th><th>3P</th><th>3P%</th><th>LL</th><th>LL%</th><th>FL</th><th>FS</th><th>+/-</th><th>PIR</th></tr></thead>
                       <tbody>
                         {active.map(p=>(
                           <tr key={p.id} data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}>
@@ -1422,6 +1524,7 @@ export default function App() {
                               <span className="num-badge">#{p.number}</span>{p.name}
                               {(p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY) && <span className="disq-tag">DQ</span>}
                             </td>
+                            <td className="min-cell">{Math.floor((p.timeOnCourt||0)/60)}:{String(Math.round((p.timeOnCourt||0)%60)).padStart(2,'0')}</td>
                             <td className="pts-cell">{p.pts}</td>
                             <td>{p.ast}</td><td>{p.reb}</td><td>{p.oreb}</td>
                             <td>{p.stl}</td><td>{p.blk}</td>
@@ -1441,7 +1544,7 @@ export default function App() {
                       </tbody>
                       <tfoot>
                         <tr>
-                          <td>Time</td><td className="pts-cell">{tot.pts}</td>
+                          <td>Time</td><td className="min-cell">—</td><td className="pts-cell">{tot.pts}</td>
                           <td>{tot.ast}</td><td>{tot.reb}</td><td>{tot.oreb}</td>
                           <td>{tot.stl}</td><td>{tot.blk}</td><td>{tot.to}</td>
                           <td className="shot-cell">{tot.fg2m}/{tot.fg2a}</td>

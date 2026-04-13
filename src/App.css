@@ -912,3 +912,64 @@ tr[data-disq=true] { opacity:.6; }
 
 /* ── Heatmap blobs (sem borda quadrada) ── */
 .heatmap-wrap svg { overflow: visible; }
+
+/* ── Botão Play/Pause destacado ── */
+.clock-play-btn {
+  font-size: 18px;
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--bg3);
+  color: var(--text);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s;
+  flex-shrink: 0;
+}
+.clock-play-btn.paused {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(249,115,22,.2);
+  animation: pulse-play 1.8s ease-in-out infinite;
+}
+.clock-play-btn.playing {
+  background: var(--bg4);
+  border-color: var(--green);
+  color: var(--green);
+}
+.clock-play-btn:active { transform: scale(0.93); }
+@keyframes pulse-play {
+  0%,100% { box-shadow: 0 0 0 4px rgba(249,115,22,.2); }
+  50%      { box-shadow: 0 0 0 8px rgba(249,115,22,.08); }
+}
+
+/* ── Minutagem ── */
+.min-cell {
+  font-family: var(--fd);
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ── Posses no stats header ── */
+.stats-possessions {
+  font-family: var(--fd);
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* ── Shot type buttons ── */
+.confirm-btn.shot-type {
+  background: var(--bg3);
+  color: var(--text);
+  border: 1.5px solid var(--border);
+  font-size: 16px;
+  padding: 14px;
+}
+.confirm-btn.shot-type:active {
+  background: rgba(249,115,22,.15);
+  border-color: var(--accent);
+  color: var(--accent);
+}
