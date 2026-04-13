@@ -141,40 +141,37 @@ function classifyShot(xPct, yPct, attackDir) {
   const W = 600, H = 320, cy = 160;
   const cx1 = 34,  cx2 = 566;
   const arcR = 145;
-  // latY define onde as retas laterais de 3pts terminam (90cm das linhas laterais)
   const latY1 = 19, latY2 = 301;
-  // latX: onde a linha lateral de 3pts encontra a linha de fundo (x da borda)
-  // A linha lateral vai DA linha de fundo ATÉ onde o arco começa
-  // Corredor lateral = APENAS a faixa x<=(borda+2), latY1<=y<=latY2
-  // Não existe corredor lateral interno — a reta vai da borda até o arco
   const midX = W / 2;
-  const BORDER = 2; // borda da quadra em px
+  const BORDER = 2;
+  // Garrafão: ftX1=124 (esq), ftX2=476 (dir), paintH=52px (cy±52)
+  const ftX1 = 124, ftX2 = 476, paintH = 52;
 
   const px = xPct * W / 100;
   const py = yPct * H / 100;
 
+  // Detecta se está no garrafão do lado de ataque
+  let inPaint = false;
   if (attackDir === 'right') {
-    // Lado defensivo: sempre 3pts
-    if (px <= midX) return { valid: true, three: true };
-    // Lado ofensivo (metade direita) — cesta = cx2=566
-    const d = Math.sqrt((px - cx2) ** 2 + (py - cy) ** 2);
-    // Cantos além da linha lateral
-    if (py <= latY1 || py >= latY2) return { valid: true, three: true };
-    // Corredor lateral dir: apenas na borda (x próximo de 598=W-2)
-    if (px >= W - BORDER - 1) return { valid: true, three: true };
-    // Classifica pelo arco
-    return { valid: true, three: d > arcR };
+    // Garrafão direito: x entre ftX2 e W, y entre cy-paintH e cy+paintH
+    inPaint = px >= ftX2 && py >= cy - paintH && py <= cy + paintH;
   } else {
-    // Lado defensivo: sempre 3pts
-    if (px >= midX) return { valid: true, three: true };
-    // Lado ofensivo (metade esquerda) — cesta = cx1=34
+    // Garrafão esquerdo: x entre 0 e ftX1, y entre cy-paintH e cy+paintH
+    inPaint = px <= ftX1 && py >= cy - paintH && py <= cy + paintH;
+  }
+
+  if (attackDir === 'right') {
+    if (px <= midX) return { valid: true, three: true, inPaint: false };
+    const d = Math.sqrt((px - cx2) ** 2 + (py - cy) ** 2);
+    if (py <= latY1 || py >= latY2) return { valid: true, three: true, inPaint: false };
+    if (px >= W - BORDER - 1) return { valid: true, three: true, inPaint: false };
+    return { valid: true, three: d > arcR, inPaint };
+  } else {
+    if (px >= midX) return { valid: true, three: true, inPaint: false };
     const d = Math.sqrt((px - cx1) ** 2 + (py - cy) ** 2);
-    // Cantos além da linha lateral
-    if (py <= latY1 || py >= latY2) return { valid: true, three: true };
-    // Corredor lateral esq: apenas na borda (x próximo de 2)
-    if (px <= BORDER + 1) return { valid: true, three: true };
-    // Classifica pelo arco
-    return { valid: true, three: d > arcR };
+    if (py <= latY1 || py >= latY2) return { valid: true, three: true, inPaint: false };
+    if (px <= BORDER + 1) return { valid: true, three: true, inPaint: false };
+    return { valid: true, three: d > arcR, inPaint };
   }
 }
 
@@ -311,11 +308,11 @@ function BasketballCourt({ shots=[], onCourtClick, hasPlayer=false, attackDir='r
 }
 
 // ─── Confirm Shot Modal ──────────────────────────────────────────────────────
-function ConfirmShotModal({ three, onMade, onMissed, onCancel }) {
+function ConfirmShotModal({ three, inPaint, onMade, onMissed, onCancel }) {
   const [shotType, setShotType] = useState(null);
 
-  if (!three && shotType === null) {
-    // Para 2pts: primeiro escolhe o tipo
+  // Pergunta tipo apenas para 2pts dentro do garrafão
+  if (!three && inPaint && shotType === null) {
     return (
       <div className="confirm-overlay">
         <div className="confirm-modal">
@@ -331,14 +328,15 @@ function ConfirmShotModal({ three, onMade, onMissed, onCancel }) {
     );
   }
 
-  const label = three ? '3 pontos' : `2pts — ${shotType}`;
+  const resolvedType = three ? '3pts' : (inPaint ? (shotType || 'Arremesso') : 'Arremesso');
+  const label = three ? '3 pontos' : inPaint ? `2pts — ${resolvedType}` : '2 pontos';
   return (
     <div className="confirm-overlay">
       <div className="confirm-modal">
         <div className="confirm-title">{label}</div>
         <div className="confirm-btns">
-          <button className="confirm-btn made" onClick={() => onMade(shotType || '3pts')}>Convertido</button>
-          <button className="confirm-btn missed" onClick={() => onMissed(shotType || '3pts')}>Errado</button>
+          <button className="confirm-btn made" onClick={() => onMade(resolvedType)}>Convertido</button>
+          <button className="confirm-btn missed" onClick={() => onMissed(resolvedType)}>Errado</button>
         </div>
         <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
       </div>
@@ -762,6 +760,12 @@ export default function App() {
 
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 1800); };
 
+  const addPossession = useCallback((g, teamIdx) => {
+    const possessions = [...(g.possessions || [0, 0])];
+    possessions[teamIdx] = (possessions[teamIdx] || 0) + 1;
+    return { ...g, possessions };
+  }, []);
+
   // setGameWithUndo: salva snapshot antes de aplicar mudança
   const setGameWithUndo = useCallback((updater) => {
     setGame(prev => {
@@ -967,10 +971,12 @@ export default function App() {
       const entry = { id: Date.now(), q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
         team: g.teams[ftTeamIdx].name, player: `#${pl.number} ${pl.name.split(' ')[0]}`,
         action: made ? 'LL certo' : 'LL erro', pts: made?1:0, color: made?'#f59e0b':'#475569' };
-      return { ...g, teams, log: [entry, ...g.log] };
+      // LL convertido encerra a posse do time que cobrou
+      const updatedFT = { ...g, teams, log: [entry, ...g.log] };
+      return made ? addPossession(updatedFT, scoringTeam) : updatedFT;
     });
     if (made) showToast(`+1 LL — ${pl.name.split(' ')[0]}`);
-  }, [game, setGameWithUndo]);
+  }, [game, setGameWithUndo, addPossession]);
 
   // ── Registra arremesso com assistência ────────────────────────────────────
   const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, shotType='Arremesso') => {
@@ -1019,10 +1025,12 @@ export default function App() {
       entries.push({ id: Date.now()+1, q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
         team: g.teams[activeTeam].name, player: `#${sp.number} ${sp.name.split(' ')[0]}`,
         action: made?(three?'3pts':'2pts'):(three?'3x falha':'2x falha'), pts, color: col });
-      return { ...g, teams, log: [...entries, ...g.log] };
+      // Posse automática: cesto convertido encerra a posse do time atacante
+      const gWithPoss = made ? addPossession({ ...g, teams, log: [...entries, ...g.log] }, activeTeam) : { ...g, teams, log: [...entries, ...g.log] };
+      return gWithPoss;
     });
     if (made) showToast(`+${pts}${assistIdx !== null ? ' + assist' : ''}`);
-    setAssistPending(null); }, [activeTeam, setGameWithUndo]);
+    setAssistPending(null); }, [activeTeam, setGameWithUndo, addPossession]);
 
   // ── Clique na quadra ───────────────────────────────────────────────────────
   // Sempre ativo quando há atleta selecionado — não precisa clicar em "+ Marcar"
@@ -1037,9 +1045,9 @@ export default function App() {
     const xPct = (e.clientX - rect.left) / rect.width  * 100;
     const yPct = (e.clientY - rect.top)  / rect.height * 100;
     const dir = activeTeam === 0 ? 'right' : 'left';
-    const { valid, three } = classifyShot(xPct, yPct, dir);
+    const { valid, three, inPaint } = classifyShot(xPct, yPct, dir);
     if (!valid) { showToast('Arremesso no lado errado da quadra'); return; }
-    setConfirmShot({ xPct, yPct, three });
+    setConfirmShot({ xPct, yPct, three, inPaint });
   }, [selectedPlayer, confirmShot, assistPending, foulPending, ftModal, subModal, running, activeTeam, game]);
 
   // ── Ações miscellâneas ─────────────────────────────────────────────────────
@@ -1140,6 +1148,7 @@ export default function App() {
       {confirmShot && (
         <ConfirmShotModal
           three={confirmShot.three}
+          inPaint={confirmShot.inPaint}
           onMade={(shotType) => {
             const s = confirmShot; setConfirmShot(null);
             setAssistPending({ scorerIdx: selectedPlayer, xPct: s.xPct, yPct: s.yPct, made: true, three: s.three, shotType });
