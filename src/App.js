@@ -90,15 +90,16 @@ function dl(content, filename) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = filename; a.click();
 }
 function exportStatsCSV(game) {
-  const lines = ['Atleta,Time,MIN,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG%,FG3M,FG3A,3P%,FTM,FTA,LL%,FALTAS,FALTAS.SOF,+/-,PIR'];
-  game.teams.forEach(t => {
+  const lines = ['Atleta,Time,MIN,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG%,FG3M,FG3A,3P%,FTM,FTA,LL%,FALTAS,FALTAS.SOF,+/-,PIR,POSSES'];
+  game.teams.forEach((t, ti) => {
     t.players.forEach(p => {
       const pm = (p.plusMinus||0) >= 0 ? `+${p.plusMinus||0}` : `${p.plusMinus||0}`;
       const min = `${Math.floor((p.timeOnCourt||0)/60)}:${String(Math.round((p.timeOnCourt||0)%60)).padStart(2,'0')}`;
-      lines.push(`"#${p.number} ${p.name}","${t.name}",${min},${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${p.fg3m},${p.fg3a},${pct(p.fg3m,p.fg3a)},${p.ftm},${p.fta},${pct(p.ftm,p.fta)},${p.fouls},${p.foulsReceived||0},${pm},${calcPIR(p)}`);
+      lines.push(`"#${p.number} ${p.name}","${t.name}",${min},${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${p.fg3m},${p.fg3a},${pct(p.fg3m,p.fg3a)},${p.ftm},${p.fta},${pct(p.ftm,p.fta)},${p.fouls},${p.foulsReceived||0},${pm},${calcPIR(p)},`);
     });
     const tot = totals(t);
-    lines.push(`"TOTAL","${t.name}",${tot.pts},${tot.ast},${tot.reb},${tot.oreb},${tot.stl},${tot.blk},${tot.to},${tot.fg2m},${tot.fg2a},${tot.fg3m},${tot.fg3a},${tot.ftm},${tot.fta},${pct(tot.fg2m+tot.fg3m,tot.fg2a+tot.fg3a)},${pct(tot.fg3m,tot.fg3a)},${pct(tot.ftm,tot.fta)},${tot.fouls},,`);
+    const teamPoss = (game.possessions||[0,0])[ti]||0;
+    lines.push(`"TOTAL","${t.name}",,${tot.pts},${tot.ast},${tot.reb},${tot.oreb},${tot.stl},${tot.blk},${tot.to},${tot.fg2m},${tot.fg2a},${tot.fg3m},${tot.fg3a},${tot.ftm},${tot.fta},${pct(tot.fg2m+tot.fg3m,tot.fg2a+tot.fg3a)},${pct(tot.fg3m,tot.fg3a)},${pct(tot.ftm,tot.fta)},${tot.fouls},,,${teamPoss}`);
   });
   dl(lines.join('\n'), `stats_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
@@ -111,9 +112,13 @@ function exportLogCSV(game) {
 }
 
 function exportShotsCSV(game) {
-  const lines = ['Atleta,Time,Quarto,Tempo,X_pct,Y_pct,Convertido,Tipo,Subtipo,Assistencia'];
+  const lines = ['Atleta,Time,Quarto,Tempo,X_pct,Y_pct,Convertido,Zona,Subtipo,Assistencia'];
   game.teams.forEach(t => t.players.forEach(p =>
-    (p.shots||[]).forEach(s => lines.push(`"#${p.number} ${p.name}","${t.name}","${s.q||''}","${s.time||''}",${s.x.toFixed(2)},${s.y.toFixed(2)},${s.made?'Sim':'Não'},${s.three?'3pts':'2pts'},"${s.shotType||''}","${s.assistedBy||''}"`))));
+    (p.shots||[]).forEach(s => {
+      // Subtipo: 3pts → Arremesso | 2pts fora garrafão → Arremesso | 2pts garrafão → tipo selecionado
+      const subtipo = s.three ? 'Arremesso' : (s.shotType && s.shotType !== '3pts' ? s.shotType : 'Arremesso');
+      lines.push(`"#${p.number} ${p.name}","${t.name}","${s.q||''}","${s.time||''}",${s.x.toFixed(2)},${s.y.toFixed(2)},${s.made?'Sim':'Não'},${s.three?'3pts':'2pts'},"${subtipo}","${s.assistedBy||''}"`);
+    })));
   dl(lines.join('\n'), `arremessos_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
 
@@ -309,18 +314,26 @@ function BasketballCourt({ shots=[], onCourtClick, hasPlayer=false, attackDir='r
 
 // ─── Confirm Shot Modal ──────────────────────────────────────────────────────
 function ConfirmShotModal({ three, inPaint, onMade, onMissed, onCancel }) {
-  const [shotType, setShotType] = useState(null);
+  // step: 'result' | 'type'
+  const [step, setStep]         = useState('result');
+  const [madeResult, setMadeResult] = useState(null);
 
-  // Pergunta tipo apenas para 2pts dentro do garrafão
-  if (!three && inPaint && shotType === null) {
+  // Passo 1: convertido ou errado
+  if (step === 'result') {
+    const label = three ? '3 pontos' : '2 pontos';
     return (
       <div className="confirm-overlay">
         <div className="confirm-modal">
-          <div className="confirm-title">Tipo de arremesso</div>
-          <div className="confirm-btns" style={{flexDirection:'column',gap:'8px'}}>
-            <button className="confirm-btn shot-type" onClick={() => setShotType('Arremesso')}>Arremesso</button>
-            <button className="confirm-btn shot-type" onClick={() => setShotType('Bandeja')}>Bandeja</button>
-            <button className="confirm-btn shot-type" onClick={() => setShotType('Enterrada')}>Enterrada</button>
+          <div className="confirm-title">Arremesso de {label}</div>
+          <div className="confirm-btns">
+            <button className="confirm-btn made" onClick={() => {
+              if (!three && inPaint) { setMadeResult(true);  setStep('type'); }
+              else onMade('Arremesso');
+            }}>Convertido</button>
+            <button className="confirm-btn missed" onClick={() => {
+              if (!three && inPaint) { setMadeResult(false); setStep('type'); }
+              else onMissed('Arremesso');
+            }}>Errado</button>
           </div>
           <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
         </div>
@@ -328,15 +341,17 @@ function ConfirmShotModal({ three, inPaint, onMade, onMissed, onCancel }) {
     );
   }
 
-  const resolvedType = three ? '3pts' : (inPaint ? (shotType || 'Arremesso') : 'Arremesso');
-  const label = three ? '3 pontos' : inPaint ? `2pts — ${resolvedType}` : '2 pontos';
+  // Passo 2 (só garrafão 2pts): tipo
   return (
     <div className="confirm-overlay">
       <div className="confirm-modal">
-        <div className="confirm-title">{label}</div>
-        <div className="confirm-btns">
-          <button className="confirm-btn made" onClick={() => onMade(resolvedType)}>Convertido</button>
-          <button className="confirm-btn missed" onClick={() => onMissed(resolvedType)}>Errado</button>
+        <div className="confirm-title">
+          {madeResult ? '✓ Convertido — ' : '✕ Errado — '}tipo?
+        </div>
+        <div className="confirm-btns" style={{flexDirection:'column',gap:'8px'}}>
+          <button className="confirm-btn shot-type" onClick={() => madeResult ? onMade('Arremesso')  : onMissed('Arremesso')}>Arremesso</button>
+          <button className="confirm-btn shot-type" onClick={() => madeResult ? onMade('Bandeja')    : onMissed('Bandeja')}>Bandeja</button>
+          <button className="confirm-btn shot-type" onClick={() => madeResult ? onMade('Enterrada')  : onMissed('Enterrada')}>Enterrada</button>
         </div>
         <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
       </div>
@@ -934,6 +949,7 @@ export default function App() {
     } else if (newFouls >= FOUL_TROUBLE) {
       showToast(`Foul trouble — ${pl.name.split(' ')[0]} (${newFouls} faltas)`);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlayer, activeTeam, game, setGameWithUndo]);
 
   // ── Lance Livre ────────────────────────────────────────────────────────────
@@ -976,7 +992,8 @@ export default function App() {
       return made ? addPossession(updatedFT, scoringTeam) : updatedFT;
     });
     if (made) showToast(`+1 LL — ${pl.name.split(' ')[0]}`);
-  }, [game, setGameWithUndo, addPossession]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game, setGameWithUndo]);
 
   // ── Registra arremesso com assistência ────────────────────────────────────
   const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, shotType='Arremesso') => {
