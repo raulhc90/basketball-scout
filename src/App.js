@@ -1121,7 +1121,7 @@ export default function App() {
               <path d="M52 12 Q40 22 30 30 Q20 38 8 48" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
             </svg>
           </div>
-          <div className="home-title">Basketball Scout</div>
+          <div className="home-title">WinFast Basketball Scout</div>
           <div className="home-sub">Análise ao vivo · Open Source · PWA</div>
         </div>
         <button className="btn-new-game" onClick={() => setShowNewGame(true)}>+ Novo Jogo</button>
