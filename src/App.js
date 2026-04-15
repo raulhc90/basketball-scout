@@ -9,8 +9,6 @@ const FOUL_DISQUALIFY = 6;   // faltas para disqualificação
 const FOUL_TROUBLE    = 4;   // faltas para foul trouble
 const TEAM_FOUL_BONUS = 5;   // faltas coletivas para bonificação
 const TECH_DISQUALIFY = 2;   // técnicas/antidesportivas para substituição obrigatória
-const buzzer = new Audio('/buzzer.mp3');
-buzzer.volume = 0.8;
 
 const buzzerRef = useRef(null);
 
