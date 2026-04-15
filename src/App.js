@@ -672,9 +672,41 @@ function NewGameModal({ onStart, onClose }) {
               </div>
             ))}
           </div>
+          <div style={{ marginTop: 16 }}>
+            <div style={{ marginBottom: 6, fontWeight: 'bold' }}>
+                Posse inicial:
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" onClick={() => setStartingTeam(0)}
+                    style={{
+                    flex: 1,
+                    padding: '10px',
+                    background: startingTeam === 0 ? '#22c55e' : '#1f2937',
+                    color: '#fff',
+                    borderRadius: '6px'
+                    }}
+                    >
+                    {nameA}
+                </button>
+
+                <button type="button" onClick={() => setStartingTeam(1)}
+                    style={{
+                    flex: 1,
+                    padding: '10px',
+                    background: startingTeam === 1 ? '#22c55e' : '#1f2937',
+                    color: '#fff',
+                    borderRadius: '6px'
+                    }}
+                    >
+                    {nameB}
+                </button>
+            </div>
+          </div>
+
         </div>
         <div className="modal-footer">
-          <button className="btn-start" onClick={()=>onStart(nameA,nameB,players.a,players.b)}>Iniciar Jogo</button>
+          <button className="btn-start" onClick={()=>onStart(nameA, nameB, rosterA, rosterB, startingTeam)}>Iniciar Jogo</button>
         </div>
       </div>
     </div>
@@ -819,10 +851,22 @@ function endPossession(g, nextTeam, playerIdx = null) {
     showToast('Ação desfeita');
   }, []);
 
-  const startGame = (nameA, nameB, rosterA, rosterB) => {
-    setGame(newGame(nameA, nameB, rosterA, rosterB));
-    setShowNewGame(false); setScreen('game'); setView('scout');
-    setActiveTeam(0); setSelectedPlayer(null); setRunning(false); };
+const startGame = (nameA, nameB, rosterA, rosterB, startingTeam) => {
+
+  const g = newGame(nameA, nameB, rosterA, rosterB);
+
+  g.possessions = startingTeam === 0 ? [1, 0] : [0, 1];
+
+  setGame(g);
+  setShowNewGame(false);
+  setScreen('game');
+  setView('scout');
+
+  setActiveTeam(startingTeam);
+
+  setSelectedPlayer(null);
+  setRunning(false);
+};
 
   const openGame = g => {
     // Compatibilidade: jogos antigos sem possessions
@@ -1261,7 +1305,9 @@ if (action.id === 'stl') {
   // ─── HOME ──────────────────────────────────────────────────────────────────
   if (screen === 'home') return (
     <div className="app">
-      {showNewGame && <NewGameModal onStart={startGame} onClose={() => setShowNewGame(false)}/>}
+      {showNewGame && <NewGameModal onStart={(nameA, nameB, rosterA, rosterB, startingTeam) => startGame(nameA, nameB, rosterA, rosterB, startingTeam)}
+      onClose={() => setShowNewGame(false)}
+    />}
       <div className="home-screen">
         <div className="home-logo">
           <div className="logo-ball">
