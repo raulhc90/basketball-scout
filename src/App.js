@@ -764,7 +764,7 @@ const playBuzzer = () => {
   buzzerRef.current.play();
 };
 
-
+/*
 const renderTeamPanel = (teamIdx) => {
   const team = game.teams[teamIdx];
 
@@ -831,7 +831,7 @@ const renderTeamPanel = (teamIdx) => {
         ))}
       </div>
 
-      {/* 🔥 AÇÕES DO TIME */}
+      //{ 🔥 AÇÕES DO TIME }
       <div className="actions">
         <button onClick={() => {
           setActiveTeam(teamIdx);
@@ -861,7 +861,7 @@ const renderTeamPanel = (teamIdx) => {
     </div>
   );
 };
-
+*/
 
   // Cronômetro
 useEffect(() => {
