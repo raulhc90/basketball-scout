@@ -1002,3 +1002,22 @@ tr[data-disq=true] { opacity:.6; }
 .team-panel {
   flex: 1;
 }
+
+.game-layout {
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.side-panel {
+  background: #0f172a;
+  padding: 10px;
+  border-radius: 10px;
+  overflow-y: auto;
+}
+
+.court-container {
+  display: flex;
+  justify-content: center;
+}

@@ -239,7 +239,7 @@ function BasketballCourt({ shots=[], onCourtClick, hasPlayer=false, attackDir='r
       <rect x={ftX2}    y={cy-paintH} width={W-2-ftX2}   height={paintH*2} fill="rgba(34,197,94,0.07)"/>
 
       {/* Linhas estruturais */}
-      <g stroke="#4a5570" strokeWidth="1" fill="none">
+      <g stroke="#ffffff" strokeWidth="1" fill="none">
         <rect x="2" y="2" width={W-4} height={H-4} rx="2"/>
         <line x1={W/2} y1="2" x2={W/2} y2={H-2}/>
         <circle cx={W/2} cy={cy} r="38"/>
@@ -1721,121 +1721,6 @@ if (action.id === 'stl') {
               </div>
             </div>
 
-            <div className="game-panels">
-
-              {/* 🟦 TIME A */}
-              <div className="team-panel">
-                <div className="players-grid">
-                  {game.teams[0].players.map((p, pi) => (
-                    <button key={pi} className="player-btn"
-                      data-active={activeTeam===0 && selectedPlayer===pi}
-                      data-bench={!p.active}
-                      data-trouble={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY}
-                      data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}
-                      data-drag-over={dragPlayer !== null && dragPlayer !== pi &&
-                        ((game.teams[0].players[dragPlayer]?.active && !p.active) ||
-                         (!game.teams[0].players[dragPlayer]?.active && p.active))}
-                      onClick={() => {
-                        setActiveTeam(0);
-                        setSelectedPlayer(pi);
-                      }}
-                      draggable
-                      onDragStart={() => setDragPlayer(pi)}
-                      onDragEnd={() => setDragPlayer(null)}
-                      onDragOver={e => e.preventDefault()}
-                      onDrop={() => {
-                        if (dragPlayer === null || dragPlayer === pi) return;
-
-                        const src = game.teams[0].players[dragPlayer];
-                        const dst = game.teams[0].players[pi];
-
-                        if (src.active === dst.active) {
-                          showToast('Arraste em quadra → reserva');
-                          setDragPlayer(null);
-                          return;
-                        }
-
-                        const outIdx = src.active ? dragPlayer : pi;
-                        const inIdx  = src.active ? pi : dragPlayer;
-
-                        setSubModal({ reason: null, outIdx, directInIdx: inIdx, canCancel: true });
-                        setDragPlayer(null);
-                      }}
-                    >
-                      <span className="pnum">#{p.number}</span>
-                      <span className="pname">{p.name.split(' ')[0]}</span>
-                      <span className="ppts">{p.pts}p</span>
-
-                      {p.fouls>0 && (
-                        <span className="pfoul-badge"
-                          data-trouble={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY}
-                          data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}>
-                          {p.fouls}f{p.techFouls>0?`+${p.techFouls}t`:''}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* 🟥 TIME B */}
-              <div className="team-panel">
-                <div className="players-grid">
-                  {game.teams[1].players.map((p, pi) => (
-                    <button key={pi} className="player-btn"
-                      data-active={activeTeam===1 && selectedPlayer===pi}
-                      data-bench={!p.active}
-                      data-trouble={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY}
-                      data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}
-                      data-drag-over={dragPlayer !== null && dragPlayer !== pi &&
-                        ((game.teams[1].players[dragPlayer]?.active && !p.active) ||
-                         (!game.teams[1].players[dragPlayer]?.active && p.active))}
-                      onClick={() => {
-                        setActiveTeam(1);
-                        setSelectedPlayer(pi);
-                      }}
-                      draggable
-                      onDragStart={() => setDragPlayer(pi)}
-                      onDragEnd={() => setDragPlayer(null)}
-                      onDragOver={e => e.preventDefault()}
-                      onDrop={() => {
-                        if (dragPlayer === null || dragPlayer === pi) return;
-
-                        const src = game.teams[1].players[dragPlayer];
-                        const dst = game.teams[1].players[pi];
-
-                        if (src.active === dst.active) {
-                          showToast('Arraste em quadra → reserva');
-                          setDragPlayer(null);
-                          return;
-                        }
-
-                        const outIdx = src.active ? dragPlayer : pi;
-                        const inIdx  = src.active ? pi : dragPlayer;
-
-                        setSubModal({ reason: null, outIdx, directInIdx: inIdx, canCancel: true });
-                        setDragPlayer(null);
-                      }}
-                    >
-                      <span className="pnum">#{p.number}</span>
-                      <span className="pname">{p.name.split(' ')[0]}</span>
-                      <span className="ppts">{p.pts}p</span>
-
-                      {p.fouls>0 && (
-                        <span className="pfoul-badge"
-                          data-trouble={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY}
-                          data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}>
-                          {p.fouls}f{p.techFouls>0?`+${p.techFouls}t`:''}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-            </div>
-
-
           </section>
 
           {sp && (
@@ -1864,13 +1749,28 @@ if (action.id === 'stl') {
                 <div className="court-active-badge">● ao vivo</div>
               )}
             </div>
-            <div ref={courtRef} className="court-container">
-              <BasketballCourt
-                shots={activeShots}
-                onCourtClick={handleCourtClick}
-                hasPlayer={selectedPlayer !== null}
-                attackDir={activeTeam === 0 ? 'right' : 'left'}
-              />
+            <div className="game-layout">
+
+              {/* 🟦 ESQUERDA — TIME A */}
+              <div className="side-panel left">
+                {renderTeamPanel(0)}
+              </div>
+
+              {/* 🏀 CENTRO — QUADRA */}
+              <div ref={courtRef} className="court-container">
+                <BasketballCourt
+                  shots={activeShots}
+                  onCourtClick={handleCourtClick}
+                  hasPlayer={selectedPlayer !== null}
+                  attackDir={activeTeam === 0 ? 'right' : 'left'}
+                />
+              </div>
+
+              {/* 🟥 DIREITA — TIME B */}
+              <div className="side-panel right">
+                {renderTeamPanel(1)}
+              </div>
+
             </div>
             {activeShots.length>0 && (
               <div className="shot-summary">
