@@ -645,11 +645,14 @@ function HeatMap({ shots, teamName, attackDir }) {
 
 // ─── New Game Modal ───────────────────────────────────────────────────────────
 function NewGameModal({ onStart, onClose }) {
+  const [startingTeam, setStartingTeam] = useState(0);
   const [nameA, setNameA] = useState('Time A');
   const [nameB, setNameB] = useState('Time B');
   const [players, setPlayers] = useState({
     a: DEFAULT_TEAM_A.map(p=>({...p})), b: DEFAULT_TEAM_B.map(p=>({...p}))
   });
+  const rosterA = players.a;
+  const rosterB = players.b;
   const upd = (t,i,f,v) => setPlayers(prev=>({...prev,[t]:prev[t].map((p,j)=>j===i?{...p,[f]:v}:p)}));
   return (
     <div className="modal-overlay">
