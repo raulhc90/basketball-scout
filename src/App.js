@@ -1179,7 +1179,6 @@ const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, s
   // ── Ações miscellâneas ─────────────────────────────────────────────────────
 const applyMisc = useCallback(action => {
 
-  // 👉 reset da flag (exceto turnover)
   if (action.id !== 'to') {
     setGameWithUndo(g => ({
       ...g,
@@ -1192,13 +1191,11 @@ const applyMisc = useCallback(action => {
     return;
   }
 
-  // 👉 falta abre modal
   if (action.id === 'fouls') {
     setFoulPending(true);
     return;
   }
 
-  // 🔥 TURNOVER (CORRETO)
   if (action.id === 'to') {
     setGameWithUndo(g => {
       const updated = addPossession(g, 1 - activeTeam);
@@ -1213,7 +1210,6 @@ const applyMisc = useCallback(action => {
     return;
   }
 
-  // 🔥 REBOTE / ROUBO / FALTA SOFRIDA → GERAM POSSE
   if (['reb', 'oreb', 'stl', 'foulsReceived'].includes(action.id)) {
     setGameWithUndo(g => {
       const clean = {
@@ -1225,7 +1221,6 @@ const applyMisc = useCallback(action => {
     });
   }
 
-  // 👉 restante das stats (sem posse)
   setGameWithUndo(g => {
     const teams = g.teams.map((t, ti) => {
       if (ti !== activeTeam) return t;
@@ -1263,41 +1258,6 @@ const applyMisc = useCallback(action => {
   });
 
 }, [selectedPlayer, activeTeam, setGameWithUndo, addPossession]);
-
-  setActiveTeam(1 - activeTeam);
-  return;
-}
-    if (action.id === 'reb' || action.id === 'oreb') {setGameWithUndo(g => addPossession(g, activeTeam, selectedPlayer));}
-    if (action.id === 'stl') {setGameWithUndo(g => addPossession(g, activeTeam, selectedPlayer));}
-    if (action.id === 'foulsReceived') {setGameWithUndo(g => addPossession(g, activeTeam, selectedPlayer));}
-    if (action.id === 'posse') {
-      // Posse: incrementa contador do time, não do jogador
-      setGameWithUndo(g => {
-        const possessions = [...(g.possessions || [0,0])];
-        possessions[activeTeam] = (possessions[activeTeam]||0) + 1;
-        const pl = g.teams[activeTeam].players[selectedPlayer];
-        const entry = { id: Date.now(), q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
-          team: g.teams[activeTeam].name, player: `#${pl.number} ${pl.name.split(' ')[0]}`,
-          action: 'Posse', pts: 0, color: '#64748b' };
-        return { ...g, possessions, log: [entry, ...g.log] };
-      });
-      return;
-    }
-    setGameWithUndo(g => {
-      const teams = g.teams.map((t, ti) => {
-        if (ti !== activeTeam) return t;
-        return { ...t, players: t.players.map((p, pi) => {
-          if (pi !== selectedPlayer) return p;
-          return { ...p, [action.id]: (p[action.id]||0)+1 };
-        })};
-      });
-      const pl = g.teams[activeTeam].players[selectedPlayer];
-      const entry = { id: Date.now(), q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
-        team: g.teams[activeTeam].name, player: `#${pl.number} ${pl.name.split(' ')[0]}`,
-        action: action.label, pts: 0, color: action.color };
-      return { ...g, teams, log: [entry, ...g.log] };
-    });
-  }, [selectedPlayer, activeTeam, setGameWithUndo,addPossession]);
 
   const applyFT = useCallback(action => {
     if (selectedPlayer === null) { showToast('Selecione um atleta'); return; }
