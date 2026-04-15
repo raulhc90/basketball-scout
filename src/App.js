@@ -1306,6 +1306,7 @@ const applyMisc = useCallback(action => {
           </div>
         )}
       </div>
+      <img src="/logo_winfast.png" alt="logo" className="app-logo"/>
     </div>
   );
 
