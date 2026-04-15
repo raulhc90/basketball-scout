@@ -745,154 +745,88 @@ export default function App() {
   // drag & drop substituição
   const [dragPlayer, setDragPlayer]       = useState(null);
   // Undo: guarda até 5 estados anteriores do jogo
+
+
   const undoStack = useRef([]);
 
-  const courtRef = useRef(null);
+    const courtRef = useRef(null);
 
-const buzzerRef = useRef(null);
+    const buzzerRef = useRef(null);
 
-useEffect(() => {
-  buzzerRef.current = new Audio('/buzzer.mp3');
-  buzzerRef.current.volume = 0.8;
-  buzzerRef.current.load();
-}, []);
-
-const playBuzzer = () => {
-  if (!buzzerRef.current) return;
-
-  buzzerRef.current.currentTime = 0; // 🔁 reinicia
-  buzzerRef.current.play();
-};
-
-/*
 const renderTeamPanel = (teamIdx) => {
   const team = game.teams[teamIdx];
 
   return (
     <div className="team-panel">
-      <h3>{team.name}</h3>
+      <div className="team-title">
+        {team.name}
+      </div>
 
       <div className="players-grid">
         {team.players.map((p, pi) => (
-          <button key={pi}
+          <button
+            key={pi}
             className="player-btn"
-            data-active={activeTeam===teamIdx && selectedPlayer===pi}
+            data-active={activeTeam === teamIdx && selectedPlayer === pi}
             data-bench={!p.active}
-            data-trouble={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY}
-            data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}
-            data-drag-over={dragPlayer !== null && dragPlayer !== pi &&
-              ((team.players[dragPlayer]?.active && !p.active) ||
-               (!team.players[dragPlayer]?.active && p.active))}
             onClick={() => {
               setActiveTeam(teamIdx);
               setSelectedPlayer(pi);
-            }}
-            draggable
-            onDragStart={() => setDragPlayer(pi)}
-            onDragEnd={() => setDragPlayer(null)}
-            onDragOver={e => e.preventDefault()}
-            onDrop={() => {
-              if (dragPlayer === null || dragPlayer === pi) return;
-
-              const src = team.players[dragPlayer];
-              const dst = team.players[pi];
-
-              if (src.active === dst.active) {
-                showToast('Arraste em quadra → reserva');
-                setDragPlayer(null);
-                return;
-              }
-
-              const outIdx = src.active ? dragPlayer : pi;
-              const inIdx  = src.active ? pi : dragPlayer;
-
-              setSubModal({
-                reason: null,
-                outIdx,
-                directInIdx: inIdx,
-                canCancel: true
-              });
-
-              setDragPlayer(null);
             }}
           >
             <span className="pnum">#{p.number}</span>
             <span className="pname">{p.name.split(' ')[0]}</span>
             <span className="ppts">{p.pts}p</span>
-
-            {p.fouls>0 && (
-              <span className="pfoul-badge"
-                data-trouble={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY}
-                data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}>
-                {p.fouls}f{p.techFouls>0?`+${p.techFouls}t`:''}
-              </span>
-            )}
           </button>
         ))}
-      </div>
-
-      //{ 🔥 AÇÕES DO TIME }
-      <div className="actions">
-        <button onClick={() => {
-          setActiveTeam(teamIdx);
-          commitShot(selectedPlayer, null, null, true, false);
-        }}>+2</button>
-
-        <button onClick={() => {
-          setActiveTeam(teamIdx);
-          commitShot(selectedPlayer, null, null, true, true);
-        }}>+3</button>
-
-        <button onClick={() => {
-          setActiveTeam(teamIdx);
-          applyMisc({ id: 'to' });
-        }}>TO</button>
-
-        <button onClick={() => {
-          setActiveTeam(teamIdx);
-          applyMisc({ id: 'reb' });
-        }}>REB</button>
-
-        <button onClick={() => {
-          setActiveTeam(teamIdx);
-          applyMisc({ id: 'stl' });
-        }}>STL</button>
       </div>
     </div>
   );
 };
-*/
 
-  // Cronômetro
-useEffect(() => {
-  if (!running || !game) return;
+    useEffect(() => {
+      buzzerRef.current = new Audio('/buzzer.mp3');
+      buzzerRef.current.volume = 0.8;
+      buzzerRef.current.load();
+    }, []);
 
-  const id = setInterval(() => {
-    setGame(g => {
-      if (!g) return g;
+    const playBuzzer = () => {
+      if (!buzzerRef.current) return;
 
-      // 🔥 QUANDO CHEGA NO FINAL
-      if (g.clock <= 1) {
-        setRunning(false);
+      buzzerRef.current.currentTime = 0; // 🔁 reinicia
+      buzzerRef.current.play();
+    };
 
-        playBuzzer();           // 🔊 buzzer
-        setShowPeriodEnd(true); // 🪟 modal
+      // Cronômetro
+    useEffect(() => {
+      if (!running || !game) return;
 
-        return {
-          ...g,
-          clock: 0
-        };
-      }
+      const id = setInterval(() => {
+        setGame(g => {
+          if (!g) return g;
 
-      return {
-        ...g,
-        clock: g.clock - 1
-      };
-    });
-  }, 1000);
+          // 🔥 QUANDO CHEGA NO FINAL
+          if (g.clock <= 1) {
+            setRunning(false);
 
-  return () => clearInterval(id);
-}, [running, game]);
+            playBuzzer();           // 🔊 buzzer
+            setShowPeriodEnd(true); // 🪟 modal
+
+            return {
+              ...g,
+              clock: 0
+            };
+          }
+
+          return {
+            ...g,
+            clock: g.clock - 1
+          };
+        });
+      }, 1000);
+
+      return () => clearInterval(id);
+    }, [running, game]);
 
   // Minutagem: quando pausa, adiciona tempo jogado aos atletas ativos
   useEffect(() => {
@@ -1751,25 +1685,13 @@ if (action.id === 'stl') {
             </div>
             <div className="game-layout">
 
-              {/* 🟦 ESQUERDA — TIME A */}
-              <div className="side-panel left">
-                {renderTeamPanel(0)}
+              {renderTeamPanel(0)}
+
+              <div className="court-container">
+                <BasketballCourt ... />
               </div>
 
-              {/* 🏀 CENTRO — QUADRA */}
-              <div ref={courtRef} className="court-container">
-                <BasketballCourt
-                  shots={activeShots}
-                  onCourtClick={handleCourtClick}
-                  hasPlayer={selectedPlayer !== null}
-                  attackDir={activeTeam === 0 ? 'right' : 'left'}
-                />
-              </div>
-
-              {/* 🟥 DIREITA — TIME B */}
-              <div className="side-panel right">
-                {renderTeamPanel(1)}
-              </div>
+              {renderTeamPanel(1)}
 
             </div>
             {activeShots.length>0 && (
