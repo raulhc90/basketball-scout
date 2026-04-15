@@ -57,6 +57,7 @@ const newGame = (nameA='Time A', nameB='Time B', rosterA=DEFAULT_TEAM_A, rosterB
   quarter: 0, clock: 600, log: [], finished: false,
   teamFouls: [[0,0,0,0,0],[0,0,0,0,0]],
   possessions: [0, 0],  // posses por time
+  lastActionWasTurnover: false // ✅ NOVO
 });
 
 const MISC_ACTIONS = [
@@ -776,6 +777,15 @@ export default function App() {
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 1800); };
 
 const addPossession = useCallback((g, teamIdx, playerIdx = null) => {
+
+  // 🚫 NÃO contar posse se veio de turnover
+  if (g.lastActionWasTurnover) {
+    return {
+      ...g,
+      lastActionWasTurnover: false // reseta a flag
+    };
+  }
+
   const possessions = [...(g.possessions || [0, 0])];
   possessions[teamIdx] = (possessions[teamIdx] || 0) + 1;
 
@@ -790,7 +800,13 @@ const addPossession = useCallback((g, teamIdx, playerIdx = null) => {
     };
   });
 
-  return { ...g, possessions, teams };
+  return {
+    ...g,
+    possessions,
+    teams,
+    lastActionWasTurnover: false // garante reset
+  };
+
 }, []);
 
   // setGameWithUndo: salva snapshot antes de aplicar mudança
@@ -966,107 +982,181 @@ const addPossession = useCallback((g, teamIdx, playerIdx = null) => {
 
   // ── Lance Livre ────────────────────────────────────────────────────────────
   // ftTeamIdx: time que ARREMESSA (adversário de quem fez a falta)
-  const commitFT = useCallback((ftTeamIdx, playerIdx, made) => {
-    if (!game) return;
-    const pl = game.teams[ftTeamIdx].players[playerIdx];
-    const scoringTeam = ftTeamIdx;
-    const opposingTeam = 1 - ftTeamIdx;
-    setGameWithUndo(g => {
-      const teams = g.teams.map((t, ti) => {
-        if (ti === scoringTeam) {
-          return {
-            ...t,
-            score: t.score + (made ? 1 : 0),
-            players: t.players.map((p, pi) => {
-              const n = { ...p };
-              if (pi === playerIdx) { n.ftm += made?1:0; n.fta += 1; n.pts += made?1:0; }
-              if (made && p.active) n.plusMinus = (n.plusMinus||0) + 1;
-              return n;
-            })
-          };
-        }
-        if (ti === opposingTeam) {
-          return {
-            ...t,
-            players: t.players.map(p => {
-              if (!p.active || !made) return p;
-              return { ...p, plusMinus: (p.plusMinus||0) - 1 };
-            })
-          };
-        }
-        return t;
-      });
-      const entry = { id: Date.now(), q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
-        team: g.teams[ftTeamIdx].name, player: `#${pl.number} ${pl.name.split(' ')[0]}`,
-        action: made ? 'LL certo' : 'LL erro', pts: made?1:0, color: made?'#f59e0b':'#475569' };
-      // LL convertido encerra a posse do time que cobrou
-      const updatedFT = { ...g, teams, log: [entry, ...g.log] };
-      return made ? addPossession(updatedFT, scoringTeam) : updatedFT;
+const commitFT = useCallback((ftTeamIdx, playerIdx, made) => {
+  if (!game) return;
+
+  const pl = game.teams[ftTeamIdx].players[playerIdx];
+  const scoringTeam = ftTeamIdx;
+  const opposingTeam = 1 - ftTeamIdx;
+
+  setGameWithUndo(g => {
+
+    // ✅ sempre reset antes de qualquer lógica
+    const base = { ...g, lastActionWasTurnover: false };
+
+    const teams = base.teams.map((t, ti) => {
+      if (ti === scoringTeam) {
+        return {
+          ...t,
+          score: t.score + (made ? 1 : 0),
+          players: t.players.map((p, pi) => {
+            const n = { ...p };
+            if (pi === playerIdx) {
+              n.ftm += made ? 1 : 0;
+              n.fta += 1;
+              n.pts += made ? 1 : 0;
+            }
+            if (made && p.active) n.plusMinus = (n.plusMinus || 0) + 1;
+            return n;
+          })
+        };
+      }
+
+      if (ti === opposingTeam) {
+        return {
+          ...t,
+          players: t.players.map(p => {
+            if (!p.active || !made) return p;
+            return { ...p, plusMinus: (p.plusMinus || 0) - 1 };
+          })
+        };
+      }
+
+      return t;
     });
-    if (made) showToast(`+1 LL — ${pl.name.split(' ')[0]}`);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game, setGameWithUndo]);
+
+    const entry = {
+      id: Date.now(),
+      q: getQuarterLabel(base.quarter),
+      time: fmtTime(base.clock),
+      team: base.teams[ftTeamIdx].name,
+      player: `#${pl.number} ${pl.name.split(' ')[0]}`,
+      action: made ? 'LL certo' : 'LL erro',
+      pts: made ? 1 : 0,
+      color: made ? '#f59e0b' : '#475569'
+    };
+
+    const updated = {
+      ...base,
+      teams,
+      log: [entry, ...base.log]
+    };
+
+    // ✅ posse só se converteu
+    return made
+      ? addPossession(updated, scoringTeam, playerIdx)
+      : updated;
+  });
+
+  if (made) showToast(`+1 LL — ${pl.name.split(' ')[0]}`);
+
+}, [game, setGameWithUndo, addPossession]);
 
   // ── Registra arremesso com assistência ────────────────────────────────────
-  const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, shotType='Arremesso') => {
-    const pts = made ? (three ? 3 : 2) : 0;
-    const actionId = made ? (three?'fg3m':'fg2m') : (three?'fg3miss':'fg2miss');
-    const col = made ? (three?'#3b82f6':'#22c55e') : '#475569';
+const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, shotType='Arremesso') => {
+  const pts = made ? (three ? 3 : 2) : 0;
+  const actionId = made ? (three?'fg3m':'fg2m') : (three?'fg3miss':'fg2miss');
+  const col = made ? (three?'#3b82f6':'#22c55e') : '#475569';
 
-    setGameWithUndo(g => {
-      const teams = g.teams.map((t, ti) => {
-        const players = t.players.map((p, pi) => {
-          const n = { ...p };
-          if (ti === activeTeam) {
-            if (pi === assistIdx) n.ast = (n.ast||0)+1;
-            if (pi === playerIdx) {
-              if      (actionId==='fg2m')    { n.fg2m++; n.fg2a++; }
-              else if (actionId==='fg2miss') { n.fg2a++; }
-              else if (actionId==='fg3m')    { n.fg3m++; n.fg3a++; }
-              else if (actionId==='fg3miss') { n.fg3a++; }
-              n.pts = n.fg2m*2 + n.fg3m*3 + n.ftm;
-              if (xPct !== null) {
-                const apl = assistIdx !== null ? g.teams[activeTeam].players[assistIdx] : null;
-                n.shots = [...(n.shots||[]), {
-                  x: xPct, y: yPct, made, three, zone: three?'3pts':'2pts',
+  setGameWithUndo(g => {
+
+    // ✅ base limpa (sem turnover flag)
+    const base = { ...g, lastActionWasTurnover: false };
+
+    const teams = base.teams.map((t, ti) => {
+      const players = t.players.map((p, pi) => {
+        const n = { ...p };
+
+        if (ti === activeTeam) {
+          if (pi === assistIdx) n.ast = (n.ast||0)+1;
+
+          if (pi === playerIdx) {
+            if      (actionId==='fg2m')    { n.fg2m++; n.fg2a++; }
+            else if (actionId==='fg2miss') { n.fg2a++; }
+            else if (actionId==='fg3m')    { n.fg3m++; n.fg3a++; }
+            else if (actionId==='fg3miss') { n.fg3a++; }
+
+            n.pts = n.fg2m*2 + n.fg3m*3 + n.ftm;
+
+            if (xPct !== null) {
+              const apl = assistIdx !== null ? base.teams[activeTeam].players[assistIdx] : null;
+              n.shots = [...(n.shots||[]), {
+                x: xPct,
+                y: yPct,
+                made,
+                three,
+                zone: three?'3pts':'2pts',
                 shotType: three ? '3pts' : (shotType||'Arremesso'),
-                  assistedBy: apl ? `#${apl.number} ${apl.name.split(' ')[0]}` : '',
-                  q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
-                }];
-              }
+                assistedBy: apl ? `#${apl.number} ${apl.name.split(' ')[0]}` : '',
+                q: getQuarterLabel(base.quarter),
+                time: fmtTime(base.clock),
+              }];
             }
-            // Plus/minus: ativos do time que marcou ganham +pts
-            if (made && p.active) n.plusMinus = (n.plusMinus||0) + pts;
-          } else {
-            // Time adversário: ativos perdem -pts
-            if (made && p.active) n.plusMinus = (n.plusMinus||0) - pts;
           }
-          return n;
-        });
-        return { ...t, score: ti === activeTeam ? t.score + pts : t.score, players };
-      });
-      const sp = g.teams[activeTeam].players[playerIdx];
-      const ap = assistIdx !== null ? g.teams[activeTeam].players[assistIdx] : null;
-      const entries = [];
-      if (ap) entries.push({ id: Date.now(), q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
-        team: g.teams[activeTeam].name, player: `#${ap.number} ${ap.name.split(' ')[0]}`,
-        action: 'Assist.', pts: 0, color: '#a855f7' });
-      entries.push({ id: Date.now()+1, q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
-        team: g.teams[activeTeam].name, player: `#${sp.number} ${sp.name.split(' ')[0]}`,
-        action: made?(three?'3pts':'2pts'):(three?'3x falha':'2x falha'), pts, color: col });
-      // Posse automática: cesto convertido encerra a posse do time atacante
-      let updated = { ...g, teams, log: [...entries, ...g.log] };
 
-      if (made) {
-        updated = addPossession(updated, activeTeam, playerIdx);
-      } else {
-        updated = addPossession(updated, activeTeam, playerIdx); // ✅ NOVO (erro também conta)
+          if (made && p.active) n.plusMinus = (n.plusMinus||0) + pts;
+
+        } else {
+          if (made && p.active) n.plusMinus = (n.plusMinus||0) - pts;
         }
-      return updated;
 
+        return n;
+      });
+
+      return {
+        ...t,
+        score: ti === activeTeam ? t.score + pts : t.score,
+        players
+      };
     });
-    if (made) showToast(`+${pts}${assistIdx !== null ? ' + assist' : ''}`);
-    setAssistPending(null); }, [activeTeam, setGameWithUndo, addPossession]);
+
+    const sp = base.teams[activeTeam].players[playerIdx];
+    const ap = assistIdx !== null ? base.teams[activeTeam].players[assistIdx] : null;
+
+    const entries = [];
+
+    if (ap) {
+      entries.push({
+        id: Date.now(),
+        q: getQuarterLabel(base.quarter),
+        time: fmtTime(base.clock),
+        team: base.teams[activeTeam].name,
+        player: `#${ap.number} ${ap.name.split(' ')[0]}`,
+        action: 'Assist.',
+        pts: 0,
+        color: '#a855f7'
+      });
+    }
+
+    entries.push({
+      id: Date.now()+1,
+      q: getQuarterLabel(base.quarter),
+      time: fmtTime(base.clock),
+      team: base.teams[activeTeam].name,
+      player: `#${sp.number} ${sp.name.split(' ')[0]}`,
+      action: made ? (three?'3pts':'2pts') : (three?'3x falha':'2x falha'),
+      pts,
+      color: col
+    });
+
+    let updated = {
+      ...base,
+      teams,
+      log: [...entries, ...base.log]
+    };
+
+    // ✅ aqui é o comportamento correto:
+    // arremesso (certo OU errado) encerra a posse
+    updated = addPossession(updated, activeTeam, playerIdx);
+
+    return updated;
+
+  });
+
+  if (made) showToast(`+${pts}${assistIdx !== null ? ' + assist' : ''}`);
+  setAssistPending(null);
+
+}, [activeTeam, setGameWithUndo, addPossession]);
 
   // ── Clique na quadra ───────────────────────────────────────────────────────
   // Sempre ativo quando há atleta selecionado — não precisa clicar em "+ Marcar"
@@ -1088,9 +1178,18 @@ const addPossession = useCallback((g, teamIdx, playerIdx = null) => {
 
   // ── Ações miscellâneas ─────────────────────────────────────────────────────
   const applyMisc = useCallback(action => {
+    if (action.id !== 'to') {setGameWithUndo(g => ({ ...g, lastActionWasTurnover: false }));}
     if (selectedPlayer === null) { showToast('Selecione um atleta'); return; }
     if (action.id === 'fouls') { setFoulPending(true); return; }
-    if (action.id === 'to') {setGameWithUndo(g => addPossession(g, 1 - activeTeam));setActiveTeam(1 - activeTeam);}
+    //if (action.id === 'to') {setGameWithUndo(g => addPossession(g, 1 - activeTeam));setActiveTeam(1 - activeTeam);}
+    if (action.id === 'to') {setGameWithUndo(g => {
+       let updated = addPossession(g, 1 - activeTeam);}
+        return {...updated,lastActionWasTurnover: true}; //marca flag de posse
+    });
+
+  setActiveTeam(1 - activeTeam);
+  return;
+}
     if (action.id === 'reb' || action.id === 'oreb') {setGameWithUndo(g => addPossession(g, activeTeam, selectedPlayer));}
     if (action.id === 'stl') {setGameWithUndo(g => addPossession(g, activeTeam, selectedPlayer));}
     if (action.id === 'foulsReceived') {setGameWithUndo(g => addPossession(g, activeTeam, selectedPlayer));}
