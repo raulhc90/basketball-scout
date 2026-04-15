@@ -749,8 +749,6 @@ export default function App() {
 
   const undoStack = useRef([]);
 
-    const courtRef = useRef(null);
-
     const buzzerRef = useRef(null);
 
 const renderTeamPanel = (teamIdx) => {
