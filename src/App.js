@@ -83,16 +83,6 @@ const totals = team => team.players.reduce((acc, p) => {
   return acc;
 }, {});
 
-const buzzer = new Audio('/buzzer.mp3');
-buzzer.volume = 0.8;
-
-const playBuzzer = () => {
-  if (!buzzerRef.current) return;
-
-  buzzerRef.current.currentTime = 0; // 🔁 reinicia
-  buzzerRef.current.play();
-};
-
 function loadGames() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; } }
 function saveGames(g) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(g)); } catch {} }
 
@@ -766,6 +756,14 @@ useEffect(() => {
   buzzerRef.current.volume = 0.8;
   buzzerRef.current.load();
 }, []);
+
+const playBuzzer = () => {
+  if (!buzzerRef.current) return;
+
+  buzzerRef.current.currentTime = 0; // 🔁 reinicia
+  buzzerRef.current.play();
+};
+
 
   // Cronômetro
 useEffect(() => {
