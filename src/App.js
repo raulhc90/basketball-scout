@@ -765,6 +765,104 @@ const playBuzzer = () => {
 };
 
 
+const renderTeamPanel = (teamIdx) => {
+  const team = game.teams[teamIdx];
+
+  return (
+    <div className="team-panel">
+      <h3>{team.name}</h3>
+
+      <div className="players-grid">
+        {team.players.map((p, pi) => (
+          <button key={pi}
+            className="player-btn"
+            data-active={activeTeam===teamIdx && selectedPlayer===pi}
+            data-bench={!p.active}
+            data-trouble={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY}
+            data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}
+            data-drag-over={dragPlayer !== null && dragPlayer !== pi &&
+              ((team.players[dragPlayer]?.active && !p.active) ||
+               (!team.players[dragPlayer]?.active && p.active))}
+            onClick={() => {
+              setActiveTeam(teamIdx);
+              setSelectedPlayer(pi);
+            }}
+            draggable
+            onDragStart={() => setDragPlayer(pi)}
+            onDragEnd={() => setDragPlayer(null)}
+            onDragOver={e => e.preventDefault()}
+            onDrop={() => {
+              if (dragPlayer === null || dragPlayer === pi) return;
+
+              const src = team.players[dragPlayer];
+              const dst = team.players[pi];
+
+              if (src.active === dst.active) {
+                showToast('Arraste em quadra → reserva');
+                setDragPlayer(null);
+                return;
+              }
+
+              const outIdx = src.active ? dragPlayer : pi;
+              const inIdx  = src.active ? pi : dragPlayer;
+
+              setSubModal({
+                reason: null,
+                outIdx,
+                directInIdx: inIdx,
+                canCancel: true
+              });
+
+              setDragPlayer(null);
+            }}
+          >
+            <span className="pnum">#{p.number}</span>
+            <span className="pname">{p.name.split(' ')[0]}</span>
+            <span className="ppts">{p.pts}p</span>
+
+            {p.fouls>0 && (
+              <span className="pfoul-badge"
+                data-trouble={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY}
+                data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}>
+                {p.fouls}f{p.techFouls>0?`+${p.techFouls}t`:''}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* 🔥 AÇÕES DO TIME */}
+      <div className="actions">
+        <button onClick={() => {
+          setActiveTeam(teamIdx);
+          commitShot(selectedPlayer, null, null, true, false);
+        }}>+2</button>
+
+        <button onClick={() => {
+          setActiveTeam(teamIdx);
+          commitShot(selectedPlayer, null, null, true, true);
+        }}>+3</button>
+
+        <button onClick={() => {
+          setActiveTeam(teamIdx);
+          applyMisc({ id: 'to' });
+        }}>TO</button>
+
+        <button onClick={() => {
+          setActiveTeam(teamIdx);
+          applyMisc({ id: 'reb' });
+        }}>REB</button>
+
+        <button onClick={() => {
+          setActiveTeam(teamIdx);
+          applyMisc({ id: 'stl' });
+        }}>STL</button>
+      </div>
+    </div>
+  );
+};
+
+
   // Cronômetro
 useEffect(() => {
   if (!running || !game) return;
@@ -1227,6 +1325,9 @@ const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, s
     return updated;
 
   });
+  if (made) {
+    setActiveTeam(prev => 1 - prev);
+  }
 
   if (made) showToast(`+${pts}${assistIdx !== null ? ' + assist' : ''}`);
   setAssistPending(null);
@@ -1619,43 +1720,122 @@ if (action.id === 'stl') {
                 </button>
               </div>
             </div>
-            <div className="players-grid">
-              {td.players.map((p,pi)=>(
-                <button key={pi} className="player-btn"
-                  data-active={selectedPlayer===pi}
-                  data-bench={!p.active}
-                  data-trouble={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY}
-                  data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}
-                  data-drag-over={dragPlayer !== null && dragPlayer !== pi &&
-                    ((td.players[dragPlayer]?.active && !p.active) || (!td.players[dragPlayer]?.active && p.active))}
-                  onClick={() => setSelectedPlayer(pi)}
-                  draggable
-                  onDragStart={() => setDragPlayer(pi)}
-                  onDragEnd={() => setDragPlayer(null)}
-                  onDragOver={e => e.preventDefault()}
-                  onDrop={() => {
-                    if (dragPlayer === null || dragPlayer === pi) return;
-                    const src = td.players[dragPlayer];
-                    const dst = td.players[pi];
-                    if (src.active === dst.active) { showToast('Arraste em quadra → reserva'); setDragPlayer(null); return; }
-                    const outIdx = src.active ? dragPlayer : pi;
-                    const inIdx  = src.active ? pi : dragPlayer;
-                    setSubModal({ reason: null, outIdx, directInIdx: inIdx, canCancel: true });
-                    setDragPlayer(null);
-                  }}>
-                  <span className="pnum">#{p.number}</span>
-                  <span className="pname">{p.name.split(' ')[0]}</span>
-                  <span className="ppts">{p.pts}p</span>
-                  {p.fouls>0 && (
-                    <span className="pfoul-badge"
-                      data-trouble={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY && (p.techFouls||0)<TECH_DISQUALIFY}
-                      data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}>
-                      {p.fouls}f{p.techFouls>0?`+${p.techFouls}t`:''}
-                    </span>
-                  )}
-                </button>
-              ))}
+
+            <div className="game-panels">
+
+              {/* 🟦 TIME A */}
+              <div className="team-panel">
+                <div className="players-grid">
+                  {game.teams[0].players.map((p, pi) => (
+                    <button key={pi} className="player-btn"
+                      data-active={activeTeam===0 && selectedPlayer===pi}
+                      data-bench={!p.active}
+                      data-trouble={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY}
+                      data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}
+                      data-drag-over={dragPlayer !== null && dragPlayer !== pi &&
+                        ((game.teams[0].players[dragPlayer]?.active && !p.active) ||
+                         (!game.teams[0].players[dragPlayer]?.active && p.active))}
+                      onClick={() => {
+                        setActiveTeam(0);
+                        setSelectedPlayer(pi);
+                      }}
+                      draggable
+                      onDragStart={() => setDragPlayer(pi)}
+                      onDragEnd={() => setDragPlayer(null)}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={() => {
+                        if (dragPlayer === null || dragPlayer === pi) return;
+
+                        const src = game.teams[0].players[dragPlayer];
+                        const dst = game.teams[0].players[pi];
+
+                        if (src.active === dst.active) {
+                          showToast('Arraste em quadra → reserva');
+                          setDragPlayer(null);
+                          return;
+                        }
+
+                        const outIdx = src.active ? dragPlayer : pi;
+                        const inIdx  = src.active ? pi : dragPlayer;
+
+                        setSubModal({ reason: null, outIdx, directInIdx: inIdx, canCancel: true });
+                        setDragPlayer(null);
+                      }}
+                    >
+                      <span className="pnum">#{p.number}</span>
+                      <span className="pname">{p.name.split(' ')[0]}</span>
+                      <span className="ppts">{p.pts}p</span>
+
+                      {p.fouls>0 && (
+                        <span className="pfoul-badge"
+                          data-trouble={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY}
+                          data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}>
+                          {p.fouls}f{p.techFouls>0?`+${p.techFouls}t`:''}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 🟥 TIME B */}
+              <div className="team-panel">
+                <div className="players-grid">
+                  {game.teams[1].players.map((p, pi) => (
+                    <button key={pi} className="player-btn"
+                      data-active={activeTeam===1 && selectedPlayer===pi}
+                      data-bench={!p.active}
+                      data-trouble={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY}
+                      data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}
+                      data-drag-over={dragPlayer !== null && dragPlayer !== pi &&
+                        ((game.teams[1].players[dragPlayer]?.active && !p.active) ||
+                         (!game.teams[1].players[dragPlayer]?.active && p.active))}
+                      onClick={() => {
+                        setActiveTeam(1);
+                        setSelectedPlayer(pi);
+                      }}
+                      draggable
+                      onDragStart={() => setDragPlayer(pi)}
+                      onDragEnd={() => setDragPlayer(null)}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={() => {
+                        if (dragPlayer === null || dragPlayer === pi) return;
+
+                        const src = game.teams[1].players[dragPlayer];
+                        const dst = game.teams[1].players[pi];
+
+                        if (src.active === dst.active) {
+                          showToast('Arraste em quadra → reserva');
+                          setDragPlayer(null);
+                          return;
+                        }
+
+                        const outIdx = src.active ? dragPlayer : pi;
+                        const inIdx  = src.active ? pi : dragPlayer;
+
+                        setSubModal({ reason: null, outIdx, directInIdx: inIdx, canCancel: true });
+                        setDragPlayer(null);
+                      }}
+                    >
+                      <span className="pnum">#{p.number}</span>
+                      <span className="pname">{p.name.split(' ')[0]}</span>
+                      <span className="ppts">{p.pts}p</span>
+
+                      {p.fouls>0 && (
+                        <span className="pfoul-badge"
+                          data-trouble={p.fouls>=FOUL_TROUBLE && p.fouls<FOUL_DISQUALIFY}
+                          data-disq={p.fouls>=FOUL_DISQUALIFY || (p.techFouls||0)>=TECH_DISQUALIFY}>
+                          {p.fouls}f{p.techFouls>0?`+${p.techFouls}t`:''}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
             </div>
+
+
           </section>
 
           {sp && (

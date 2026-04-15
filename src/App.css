@@ -993,3 +993,12 @@ tr[data-disq=true] { opacity:.6; }
     right: 12px;
   }
 }
+
+.game-panels {
+  display: flex;
+  gap: 12px;
+}
+
+.team-panel {
+  flex: 1;
+}
