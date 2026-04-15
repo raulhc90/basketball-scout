@@ -1688,7 +1688,12 @@ if (action.id === 'stl') {
               {renderTeamPanel(0)}
 
               <div className="court-container">
-                <BasketballCourt ... />
+                <BasketballCourt
+                  shots={activeShots}
+                  onCourtClick={handleCourtClick}
+                  hasPlayer={selectedPlayer !== null}
+                  attackDir={activeTeam === 0 ? 'right' : 'left'}
+                />
               </div>
 
               {renderTeamPanel(1)}
