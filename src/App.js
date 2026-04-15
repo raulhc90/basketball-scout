@@ -776,27 +776,20 @@ export default function App() {
 
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 1800); };
 
-const addPossession = useCallback((g, teamIdx, playerIdx = null) => {
-
-  // 🚫 NÃO contar posse se veio de turnover
-  if (g.lastActionWasTurnover) {
-    return {
-      ...g,
-      lastActionWasTurnover: false // reseta a flag
-    };
-  }
-
+function endPossession(g, nextTeam, playerIdx = null) {
   const possessions = [...(g.possessions || [0, 0])];
-  possessions[teamIdx] = (possessions[teamIdx] || 0) + 1;
+  possessions[nextTeam] = (possessions[nextTeam] || 0) + 1;
 
   const teams = g.teams.map((t, ti) => {
-    if (ti !== teamIdx) return t;
+    if (ti !== nextTeam) return t;
+
     return {
       ...t,
-      players: t.players.map((p, pi) => {
-        if (pi !== playerIdx) return p;
-        return { ...p, possessions: (p.possessions || 0) + 1 };
-      })
+      players: t.players.map((p, pi) =>
+        pi === playerIdx
+          ? { ...p, possessions: (p.possessions || 0) + 1 }
+          : p
+      )
     };
   });
 
@@ -804,7 +797,39 @@ const addPossession = useCallback((g, teamIdx, playerIdx = null) => {
     ...g,
     possessions,
     teams,
-    lastActionWasTurnover: false // garante reset
+    activeTeam: nextTeam
+  };
+}
+
+const addPossession = useCallback((g, teamIdx, playerIdx = null) => {
+
+  // 🚫 BLOQUEIO CORRETO
+  if (g.lastActionWasTurnover) {
+    return {
+      ...g,
+      lastActionWasTurnover: false // consome a flag
+    };
+  }
+
+  const possessions = [...(g.possessions || [0, 0])];
+  possessions[teamIdx] += 1;
+
+  const teams = g.teams.map((t, ti) => {
+    if (ti !== teamIdx) return t;
+    return {
+      ...t,
+      players: t.players.map((p, pi) =>
+        pi === playerIdx
+          ? { ...p, possessions: (p.possessions || 0) + 1 }
+          : p
+      )
+    };
+  });
+
+  return {
+    ...g,
+    possessions,
+    teams
   };
 
 }, []);
@@ -991,8 +1016,7 @@ const commitFT = useCallback((ftTeamIdx, playerIdx, made) => {
 
   setGameWithUndo(g => {
 
-    // ✅ sempre reset antes de qualquer lógica
-    const base = { ...g, lastActionWasTurnover: false };
+    const base = g; // ✅ corrigido
 
     const teams = base.teams.map((t, ti) => {
       if (ti === scoringTeam) {
@@ -1036,21 +1060,20 @@ const commitFT = useCallback((ftTeamIdx, playerIdx, made) => {
       color: made ? '#f59e0b' : '#475569'
     };
 
-    const updated = {
+    let updated = {
       ...base,
       teams,
       log: [entry, ...base.log]
     };
 
-    // ✅ posse só se converteu
-    return made
-      ? addPossession(updated, scoringTeam, playerIdx)
-      : updated;
+    // 🚫 NÃO mexe na posse aqui (automático via rebote / turnover)
+
+    return updated;
   });
 
   if (made) showToast(`+1 LL — ${pl.name.split(' ')[0]}`);
 
-}, [game, setGameWithUndo, addPossession]);
+}, [game, setGameWithUndo]);
 
   // ── Registra arremesso com assistência ────────────────────────────────────
 const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, shotType='Arremesso') => {
@@ -1060,8 +1083,7 @@ const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, s
 
   setGameWithUndo(g => {
 
-    // ✅ base limpa (sem turnover flag)
-    const base = { ...g, lastActionWasTurnover: false };
+    const base = g; // ✅ corrigido
 
     const teams = base.teams.map((t, ti) => {
       const players = t.players.map((p, pi) => {
@@ -1145,9 +1167,10 @@ const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, s
       log: [...entries, ...base.log]
     };
 
-    // ✅ aqui é o comportamento correto:
-    // arremesso (certo OU errado) encerra a posse
-    updated = addPossession(updated, activeTeam, playerIdx);
+    // 🔥 POSSE AUTOMÁTICA
+    if (made) {
+      updated = endPossession(updated, 1 - activeTeam);
+    }
 
     return updated;
 
@@ -1156,7 +1179,7 @@ const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, s
   if (made) showToast(`+${pts}${assistIdx !== null ? ' + assist' : ''}`);
   setAssistPending(null);
 
-}, [activeTeam, setGameWithUndo, addPossession]);
+}, [activeTeam, setGameWithUndo]);
 
   // ── Clique na quadra ───────────────────────────────────────────────────────
   // Sempre ativo quando há atleta selecionado — não precisa clicar em "+ Marcar"
@@ -1179,48 +1202,51 @@ const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, s
   // ── Ações miscellâneas ─────────────────────────────────────────────────────
 const applyMisc = useCallback(action => {
 
-  if (action.id !== 'to') {
-    setGameWithUndo(g => ({
-      ...g,
-      lastActionWasTurnover: false
-    }));
-  }
-
+  // 1. valida jogador
   if (selectedPlayer === null) {
     showToast('Selecione um atleta');
     return;
   }
 
+  // 2. faltas (modal)
   if (action.id === 'fouls') {
     setFoulPending(true);
     return;
   }
 
+  // 🔥 3. TURNOVER (AQUI!)
   if (action.id === 'to') {
-    setGameWithUndo(g => {
-      const updated = addPossession(g, 1 - activeTeam);
-
-      return {
-        ...updated,
-        lastActionWasTurnover: true
-      };
-    });
-
+    setGameWithUndo(g => endPossession(g, 1 - activeTeam));
     setActiveTeam(1 - activeTeam);
     return;
   }
 
-  if (['reb', 'oreb', 'stl', 'foulsReceived'].includes(action.id)) {
-    setGameWithUndo(g => {
-      const clean = {
-        ...g,
-        lastActionWasTurnover: false
-      };
+  // 🔥 4. REBOTE
+if (action.id === 'reb' || action.id === 'oreb') {
 
-      return addPossession(clean, activeTeam, selectedPlayer);
-    });
-  }
+  setGameWithUndo(g => {
 
+    const isOffensive = action.id === 'oreb';
+
+    // 👉 rebote defensivo = nova posse
+    if (!isOffensive) {
+      return endPossession(g, activeTeam, selectedPlayer);
+    }
+
+    // 👉 rebote ofensivo = mesma posse
+    return g;
+  });
+
+  return;
+}
+
+  // 🔥 5. ROUBO
+if (action.id === 'stl') {
+  setGameWithUndo(g => endPossession(g, activeTeam, selectedPlayer));
+  return;
+}
+
+  // 6. resto das ações (stats simples)
   setGameWithUndo(g => {
     const teams = g.teams.map((t, ti) => {
       if (ti !== activeTeam) return t;
@@ -1257,7 +1283,7 @@ const applyMisc = useCallback(action => {
     };
   });
 
-}, [selectedPlayer, activeTeam, setGameWithUndo, addPossession]);
+}, [selectedPlayer, activeTeam, setGameWithUndo]);
 
   const applyFT = useCallback(action => {
     if (selectedPlayer === null) { showToast('Selecione um atleta'); return; }
