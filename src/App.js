@@ -9,6 +9,16 @@ const FOUL_DISQUALIFY = 6;   // faltas para disqualificação
 const FOUL_TROUBLE    = 4;   // faltas para foul trouble
 const TEAM_FOUL_BONUS = 5;   // faltas coletivas para bonificação
 const TECH_DISQUALIFY = 2;   // técnicas/antidesportivas para substituição obrigatória
+const buzzer = new Audio('/buzzer.mp3');
+buzzer.volume = 0.8;
+
+const buzzerRef = useRef(null);
+
+useEffect(() => {
+  buzzerRef.current = new Audio('/buzzer.mp3');
+  buzzerRef.current.volume = 0.8;
+  buzzerRef.current.load();
+}, []);
 
 const INITIAL_PLAYER = () => ({
   pts: 0, ast: 0, reb: 0, oreb: 0, stl: 0, blk: 0, to: 0,
@@ -82,6 +92,16 @@ const totals = team => team.players.reduce((acc, p) => {
     .forEach(k => acc[k] = (acc[k]||0) + (p[k]||0));
   return acc;
 }, {});
+
+const buzzer = new Audio('/buzzer.mp3');
+buzzer.volume = 0.8;
+
+const playBuzzer = () => {
+  if (!buzzerRef.current) return;
+
+  buzzerRef.current.currentTime = 0; // 🔁 reinicia
+  buzzerRef.current.play();
+};
 
 function loadGames() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; } }
 function saveGames(g) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(g)); } catch {} }
@@ -727,6 +747,7 @@ export default function App() {
   const [view, setView]       = useState('scout');
   const [toast, setToast]     = useState(null);
   const [showNewGame, setShowNewGame] = useState(false);
+  const [showPeriodEnd, setShowPeriodEnd] = useState(false);
   // shotMode removido — quadra sempre ativa quando atleta selecionado
 
   // Modal states
@@ -749,14 +770,35 @@ export default function App() {
   const courtRef = useRef(null);
 
   // Cronômetro
-  useEffect(() => {
-    if (!running || !game) return;
-    const id = setInterval(() => setGame(g => {
-      if (!g || g.clock <= 0) { setRunning(false); return g; }
-      return { ...g, clock: g.clock - 1 };
-    }), 1000);
-    return () => clearInterval(id);
-  }, [running, game]);
+useEffect(() => {
+  if (!running || !game) return;
+
+  const id = setInterval(() => {
+    setGame(g => {
+      if (!g) return g;
+
+      // 🔥 QUANDO CHEGA NO FINAL
+      if (g.clock <= 1) {
+        setRunning(false);
+
+        playBuzzer();           // 🔊 buzzer
+        setShowPeriodEnd(true); // 🪟 modal
+
+        return {
+          ...g,
+          clock: 0
+        };
+      }
+
+      return {
+        ...g,
+        clock: g.clock - 1
+      };
+    });
+  }, 1000);
+
+  return () => clearInterval(id);
+}, [running, game]);
 
   // Minutagem: quando pausa, adiciona tempo jogado aos atletas ativos
   useEffect(() => {
@@ -868,7 +910,7 @@ const startGame = (nameA, nameB, rosterA, rosterB, startingTeam) => {
   setActiveTeam(startingTeam);
 
   setSelectedPlayer(null);
-  setRunning(false);
+  setRunning(true);
 };
 
   const openGame = g => {
@@ -1834,6 +1876,39 @@ if (action.id === 'stl') {
           </div>
         </main>
       )}
+
+      {showPeriodEnd && (
+      <div className="modal-overlay">
+        <div className="modal">
+          <div className="modal-header">
+            <span>Fim do período</span>
+          </div>
+
+          <div className="modal-body">
+            <p>{game ? `Fim do ${QUARTERS[game.quarter]}` : ''}</p>
+          </div>
+
+          <div className="modal-footer">
+            <button
+              className="btn-start"
+              onClick={() => {
+                setGame(g => ({
+                  ...g,
+                  quarter: Math.min(g.quarter + 1, 3),
+                  clock: 600
+                }));
+
+                setShowPeriodEnd(false);
+                setRunning(true);
+              }}
+            >
+              Próximo Período
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
     </div>
   );
 }
