@@ -10,14 +10,6 @@ const FOUL_TROUBLE    = 4;   // faltas para foul trouble
 const TEAM_FOUL_BONUS = 5;   // faltas coletivas para bonificação
 const TECH_DISQUALIFY = 2;   // técnicas/antidesportivas para substituição obrigatória
 
-const buzzerRef = useRef(null);
-
-useEffect(() => {
-  buzzerRef.current = new Audio('/buzzer.mp3');
-  buzzerRef.current.volume = 0.8;
-  buzzerRef.current.load();
-}, []);
-
 const INITIAL_PLAYER = () => ({
   pts: 0, ast: 0, reb: 0, oreb: 0, stl: 0, blk: 0, to: 0,
   fg2a: 0, fg2m: 0, fg3a: 0, fg3m: 0, fta: 0, ftm: 0,
@@ -766,6 +758,14 @@ export default function App() {
   const undoStack = useRef([]);
 
   const courtRef = useRef(null);
+
+const buzzerRef = useRef(null);
+
+useEffect(() => {
+  buzzerRef.current = new Audio('/buzzer.mp3');
+  buzzerRef.current.volume = 0.8;
+  buzzerRef.current.load();
+}, []);
 
   // Cronômetro
 useEffect(() => {
