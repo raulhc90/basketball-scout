@@ -801,39 +801,6 @@ function endPossession(g, nextTeam, playerIdx = null) {
   };
 }
 
-const addPossession = useCallback((g, teamIdx, playerIdx = null) => {
-
-  // 🚫 BLOQUEIO CORRETO
-  if (g.lastActionWasTurnover) {
-    return {
-      ...g,
-      lastActionWasTurnover: false // consome a flag
-    };
-  }
-
-  const possessions = [...(g.possessions || [0, 0])];
-  possessions[teamIdx] += 1;
-
-  const teams = g.teams.map((t, ti) => {
-    if (ti !== teamIdx) return t;
-    return {
-      ...t,
-      players: t.players.map((p, pi) =>
-        pi === playerIdx
-          ? { ...p, possessions: (p.possessions || 0) + 1 }
-          : p
-      )
-    };
-  });
-
-  return {
-    ...g,
-    possessions,
-    teams
-  };
-
-}, []);
-
   // setGameWithUndo: salva snapshot antes de aplicar mudança
   const setGameWithUndo = useCallback((updater) => {
     setGame(prev => {
