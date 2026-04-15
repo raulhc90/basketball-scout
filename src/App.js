@@ -15,9 +15,10 @@ const INITIAL_PLAYER = () => ({
   fg2a: 0, fg2m: 0, fg3a: 0, fg3m: 0, fta: 0, ftm: 0,
   fouls: 0, techFouls: 0, foulsReceived: 0,
   plusMinus: 0,
-  timeOnCourt: 0,   // segundos em quadra
-  entryTime: null,  // clock quando entrou em quadra (null = não está)
+  timeOnCourt: 0,
+  entryTime: null,
   shots: [],
+  possessions: 0 // ✅ NOVO
 });
 
 // PIR = PTS + REB + AST + STL + BLK + (FGM - FGA) + (FTM - FTA) - TO - FOULS
@@ -66,7 +67,6 @@ const MISC_ACTIONS = [
   { id:'to',           label:'Turnov.',       pts:0, color:'#ef4444' },
   { id:'fouls',        label:'Falta',         pts:0, color:'#f97316' },
   { id:'foulsReceived',label:'Falta Sofrida', pts:0, color:'#c084fc' },
-  { id:'posse',        label:'Posse',         pts:0, color:'#64748b', isPosse: true },
 ];
 
 const FT_ACTIONS = [
@@ -95,7 +95,7 @@ function exportStatsCSV(game) {
     t.players.forEach(p => {
       const pm = (p.plusMinus||0) >= 0 ? `+${p.plusMinus||0}` : `${p.plusMinus||0}`;
       const min = `${Math.floor((p.timeOnCourt||0)/60)}:${String(Math.round((p.timeOnCourt||0)%60)).padStart(2,'0')}`;
-      lines.push(`"#${p.number} ${p.name}","${t.name}",${min},${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${p.fg3m},${p.fg3a},${pct(p.fg3m,p.fg3a)},${p.ftm},${p.fta},${pct(p.ftm,p.fta)},${p.fouls},${p.foulsReceived||0},${pm},${calcPIR(p)},`);
+      lines.push(`"#${p.number} ${p.name}","${t.name}",${min},${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${p.fg3m},${p.fg3a},${pct(p.fg3m,p.fg3a)},${p.ftm},${p.fta},${pct(p.ftm,p.fta)},${p.fouls},${p.foulsReceived||0},${pm},${calcPIR(p)},${p.possessions || 0}`);
     });
     const tot = totals(t);
     const teamPoss = (game.possessions||[0,0])[ti]||0;
@@ -775,11 +775,23 @@ export default function App() {
 
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(null), 1800); };
 
-  const addPossession = useCallback((g, teamIdx) => {
-    const possessions = [...(g.possessions || [0, 0])];
-    possessions[teamIdx] = (possessions[teamIdx] || 0) + 1;
-    return { ...g, possessions };
-  }, []);
+const addPossession = useCallback((g, teamIdx, playerIdx = null) => {
+  const possessions = [...(g.possessions || [0, 0])];
+  possessions[teamIdx] = (possessions[teamIdx] || 0) + 1;
+
+  const teams = g.teams.map((t, ti) => {
+    if (ti !== teamIdx) return t;
+    return {
+      ...t,
+      players: t.players.map((p, pi) => {
+        if (pi !== playerIdx) return p;
+        return { ...p, possessions: (p.possessions || 0) + 1 };
+      })
+    };
+  });
+
+  return { ...g, possessions, teams };
+}, []);
 
   // setGameWithUndo: salva snapshot antes de aplicar mudança
   const setGameWithUndo = useCallback((updater) => {
@@ -1043,8 +1055,15 @@ export default function App() {
         team: g.teams[activeTeam].name, player: `#${sp.number} ${sp.name.split(' ')[0]}`,
         action: made?(three?'3pts':'2pts'):(three?'3x falha':'2x falha'), pts, color: col });
       // Posse automática: cesto convertido encerra a posse do time atacante
-      const gWithPoss = made ? addPossession({ ...g, teams, log: [...entries, ...g.log] }, activeTeam) : { ...g, teams, log: [...entries, ...g.log] };
-      return gWithPoss;
+      let updated = { ...g, teams, log: [...entries, ...g.log] };
+
+      if (made) {
+        updated = addPossession(updated, activeTeam, playerIdx);
+      } else {
+        updated = addPossession(updated, activeTeam, playerIdx); // ✅ NOVO (erro também conta)
+        }
+      return updated;
+
     });
     if (made) showToast(`+${pts}${assistIdx !== null ? ' + assist' : ''}`);
     setAssistPending(null); }, [activeTeam, setGameWithUndo, addPossession]);
@@ -1071,6 +1090,10 @@ export default function App() {
   const applyMisc = useCallback(action => {
     if (selectedPlayer === null) { showToast('Selecione um atleta'); return; }
     if (action.id === 'fouls') { setFoulPending(true); return; }
+    if (action.id === 'to') {setGameWithUndo(g => addPossession(g, 1 - activeTeam));setActiveTeam(1 - activeTeam);}
+    if (action.id === 'reb' || action.id === 'oreb') {setGameWithUndo(g => addPossession(g, activeTeam, selectedPlayer));}
+    if (action.id === 'stl') {setGameWithUndo(g => addPossession(g, activeTeam, selectedPlayer));}
+    if (action.id === 'foulsReceived') {setGameWithUndo(g => addPossession(g, activeTeam, selectedPlayer));}
     if (action.id === 'posse') {
       // Posse: incrementa contador do time, não do jogador
       setGameWithUndo(g => {
