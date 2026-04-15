@@ -1121,7 +1121,7 @@ const addPossession = useCallback((g, teamIdx, playerIdx = null) => {
         action: action.label, pts: 0, color: action.color };
       return { ...g, teams, log: [entry, ...g.log] };
     });
-  }, [selectedPlayer, activeTeam, setGameWithUndo]);
+  }, [selectedPlayer, activeTeam, setGameWithUndo,addPossession]);
 
   const applyFT = useCallback(action => {
     if (selectedPlayer === null) { showToast('Selecione um atleta'); return; }
