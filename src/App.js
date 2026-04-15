@@ -769,16 +769,108 @@ const renderTeamPanel = (teamIdx) => {
             className="player-btn"
             data-active={activeTeam === teamIdx && selectedPlayer === pi}
             data-bench={!p.active}
+            data-trouble={p.fouls >= FOUL_TROUBLE && p.fouls < FOUL_DISQUALIFY}
+            data-disq={p.fouls >= FOUL_DISQUALIFY || (p.techFouls || 0) >= TECH_DISQUALIFY}
+            data-drag-over={
+              dragPlayer !== null &&
+              dragPlayer !== pi &&
+              (
+                (team.players[dragPlayer]?.active && !p.active) ||
+                (!team.players[dragPlayer]?.active && p.active)
+              )
+            }
             onClick={() => {
               setActiveTeam(teamIdx);
               setSelectedPlayer(pi);
+            }}
+            draggable
+            onDragStart={() => setDragPlayer(pi)}
+            onDragEnd={() => setDragPlayer(null)}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={() => {
+              if (dragPlayer === null || dragPlayer === pi) return;
+
+              const src = team.players[dragPlayer];
+              const dst = team.players[pi];
+
+              // não permite troca inválida
+              if (src.active === dst.active) {
+                showToast('Arraste em quadra → reserva');
+                setDragPlayer(null);
+                return;
+              }
+
+              const outIdx = src.active ? dragPlayer : pi;
+              const inIdx  = src.active ? pi : dragPlayer;
+
+              setSubModal({
+                reason: null,
+                outIdx,
+                directInIdx: inIdx,
+                canCancel: true
+              });
+
+              setDragPlayer(null);
             }}
           >
             <span className="pnum">#{p.number}</span>
             <span className="pname">{p.name.split(' ')[0]}</span>
             <span className="ppts">{p.pts}p</span>
+
+            {p.fouls > 0 && (
+              <span
+                className="pfoul-badge"
+                data-trouble={
+                  p.fouls >= FOUL_TROUBLE &&
+                  p.fouls < FOUL_DISQUALIFY &&
+                  (p.techFouls || 0) < TECH_DISQUALIFY
+                }
+                data-disq={
+                  p.fouls >= FOUL_DISQUALIFY ||
+                  (p.techFouls || 0) >= TECH_DISQUALIFY
+                }
+              >
+                {p.fouls}f{p.techFouls > 0 ? `+${p.techFouls}t` : ''}
+              </span>
+            )}
           </button>
         ))}
+      </div>
+
+      {/* 🔥 AÇÕES DO TIME */}
+      <div className="actions">
+        <button onClick={() => {
+          setActiveTeam(teamIdx);
+          if (selectedPlayer !== null) {
+            commitShot(selectedPlayer, null, null, true, false);
+          } else {
+            showToast('Selecione um atleta');
+          }
+        }}>+2</button>
+
+        <button onClick={() => {
+          setActiveTeam(teamIdx);
+          if (selectedPlayer !== null) {
+            commitShot(selectedPlayer, null, null, true, true);
+          } else {
+            showToast('Selecione um atleta');
+          }
+        }}>+3</button>
+
+        <button onClick={() => {
+          setActiveTeam(teamIdx);
+          applyMisc({ id: 'to' });
+        }}>TO</button>
+
+        <button onClick={() => {
+          setActiveTeam(teamIdx);
+          applyMisc({ id: 'reb' });
+        }}>REB</button>
+
+        <button onClick={() => {
+          setActiveTeam(teamIdx);
+          applyMisc({ id: 'stl' });
+        }}>STL</button>
       </div>
     </div>
   );
