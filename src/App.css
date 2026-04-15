@@ -1021,3 +1021,19 @@ tr[data-disq=true] { opacity:.6; }
   display: flex;
   justify-content: center;
 }
+
+.actions {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.actions button {
+  padding: 8px;
+  border-radius: 6px;
+  background: #1f2937;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+}

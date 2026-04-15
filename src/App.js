@@ -836,40 +836,79 @@ const renderTeamPanel = (teamIdx) => {
       </div>
 
       {/* 🔥 AÇÕES DO TIME */}
+
       <div className="actions">
-        <button onClick={() => {
-          setActiveTeam(teamIdx);
-          if (selectedPlayer !== null) {
-            commitShot(selectedPlayer, null, null, true, false);
-          } else {
-            showToast('Selecione um atleta');
-          }
-        }}>+2</button>
 
-        <button onClick={() => {
-          setActiveTeam(teamIdx);
-          if (selectedPlayer !== null) {
-            commitShot(selectedPlayer, null, null, true, true);
-          } else {
-            showToast('Selecione um atleta');
-          }
-        }}>+3</button>
+          {/* ARREMESSOS */}
+          <button onClick={() => {
+            setActiveTeam(teamIdx);
+            selectedPlayer !== null
+              ? commitShot(selectedPlayer, null, null, true, false)
+              : showToast('Selecione um atleta');
+          }}>+2</button>
 
-        <button onClick={() => {
-          setActiveTeam(teamIdx);
-          applyMisc({ id: 'to' });
-        }}>TO</button>
+          <button onClick={() => {
+            setActiveTeam(teamIdx);
+            selectedPlayer !== null
+              ? commitShot(selectedPlayer, null, null, true, true)
+              : showToast('Selecione um atleta');
+          }}>+3</button>
 
-        <button onClick={() => {
-          setActiveTeam(teamIdx);
-          applyMisc({ id: 'reb' });
-        }}>REB</button>
+          {/* LANCE LIVRE */}
+          <button onClick={() => {
+            setActiveTeam(teamIdx);
+            if (selectedPlayer !== null) {
+              commitFT(teamIdx, selectedPlayer, true);
+            } else showToast('Selecione um atleta');
+          }}>LL ✔</button>
 
-        <button onClick={() => {
-          setActiveTeam(teamIdx);
-          applyMisc({ id: 'stl' });
-        }}>STL</button>
-      </div>
+          <button onClick={() => {
+            setActiveTeam(teamIdx);
+            if (selectedPlayer !== null) {
+              commitFT(teamIdx, selectedPlayer, false);
+            } else showToast('Selecione um atleta');
+          }}>LL ✖</button>
+
+          {/* POSSE / DEFESA */}
+          <button onClick={() => {
+            setActiveTeam(teamIdx);
+            applyMisc({ id: 'reb' });
+          }}>REB</button>
+
+          <button onClick={() => {
+            setActiveTeam(teamIdx);
+            applyMisc({ id: 'oreb' });
+          }}>OREB</button>
+
+          <button onClick={() => {
+            setActiveTeam(teamIdx);
+            applyMisc({ id: 'stl' });
+          }}>STL</button>
+
+          <button onClick={() => {
+            setActiveTeam(teamIdx);
+            applyMisc({ id: 'blk' });
+          }}>BLK</button>
+
+          {/* TURNOVER */}
+          <button onClick={() => {
+            setActiveTeam(teamIdx);
+            applyMisc({ id: 'to' });
+          }}>TO</button>
+
+          {/* FALTAS */}
+          <button onClick={() => {
+            setActiveTeam(teamIdx);
+            applyMisc({ id: 'fouls' });
+          }}>Falta</button>
+
+          <button onClick={() => {
+            setActiveTeam(teamIdx);
+            applyMisc({ id: 'foulsReceived' });
+          }}>Falta Sofrida</button>
+
+        </div>
+
     </div>
   );
 };
