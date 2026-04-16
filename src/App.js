@@ -1220,36 +1220,54 @@ export default function App() {
 
         <div className="scoreboard">
 
-            {/* TIME 0 */}
-            <div className="team-score" ...>
-             ...
-            </div>
-
-            {/* 🔥 ADICIONA AQUI */}
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '6px',
-              background: '#111',
-              padding: '6px 10px',
-              borderRadius: '8px'
-            }}>
-              <button onClick={nextQuarter}>
-                {QUARTERS[game.quarter]}
-              </button>
-
-              <button onClick={undoLastAction}>
-                ↩
-              </button>
-            </div>
-
-            {/* TIME 1 */}
-            <div className="team-score" ...>
-                ...
-        </div>
-
+          {/* TIME 0 */}
+          <div
+            className="team-score"
+            data-active={activeTeam === 0}
+            onClick={() => {
+              setActiveTeam(0);
+              setSelectedPlayerA(null);
+              setSelectedPlayerB(null);
+            }}
+          >
+            <span className="team-name">{game.teams[0].name}</span>
+            <span className="score">{game.teams[0].score}</span>
           </div>
+
+          {/* CONTROLES */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '6px',
+            background: '#111',
+            padding: '6px 10px',
+            borderRadius: '8px'
+          }}>
+            <button onClick={nextQuarter}>
+              {QUARTERS[game.quarter]}
+            </button>
+
+            <button onClick={undoLastAction}>
+              ↩
+            </button>
+          </div>
+
+          {/* TIME 1 */}
+          <div
+            className="team-score"
+            data-active={activeTeam === 1}
+            onClick={() => {
+              setActiveTeam(1);
+              setSelectedPlayerA(null);
+              setSelectedPlayerB(null);
+            }}
+          >
+            <span className="team-name">{game.teams[1].name}</span>
+            <span className="score">{game.teams[1].score}</span>
+          </div>
+
+        </div>
           <div className="center-info">
             <span className="quarter-label">{getQuarterLabel(game.quarter)}</span>
             <div className="clock">{fmtTime(game.clock)}</div>
