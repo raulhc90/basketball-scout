@@ -1505,7 +1505,7 @@ if (action.id === 'stl') {
 
   // ─── GAME ──────────────────────────────────────────────────────────────────
   const td  = game.teams[activeTeam];
-  const sp  = selectedPlayer !== null ? td.players[getSelectedPlayer(activeTeam)]] : null;
+  const sp  = selectedPlayer !== null ? td.players[getSelectedPlayer(activeTeam)] : null;
   const activeShots = sp ? (sp.shots||[]) : td.players.flatMap(p => p.shots||[]);
   const tfq = (game.teamFouls?.[activeTeam] || [])[game.quarter] || 0;
   const inBonus = tfq >= TEAM_FOUL_BONUS;
