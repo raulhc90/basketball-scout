@@ -1372,7 +1372,7 @@ const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, s
   if (made) showToast(`+${pts}${assistIdx !== null ? ' + assist' : ''}`);
   setAssistPending(null);
 
-}, [activeTeam, setGameWithUndo]);
+}, [activeTeam, selectedPlayerA, selectedPlayerB, setGameWithUndo]);
 
   // ── Clique na quadra ───────────────────────────────────────────────────────
   // Sempre ativo quando há atleta selecionado — não precisa clicar em "+ Marcar"
@@ -1475,7 +1475,7 @@ const applyMisc = useCallback(action => {
     };
   });
 
-}, [activeTeam, setGameWithUndo]);
+}, [activeTeam, selectedPlayerA, selectedPlayerB, setGameWithUndo]);
 
     const applyFT = useCallback(action => {
       const playerIdx = activeTeam === 0 ? selectedPlayerA : selectedPlayerB;
@@ -1831,30 +1831,6 @@ setSelectedPlayerB(null); }}>
             )}
           </section>
 
-          /* Ações — sem botões 2pts/3pts, somente LL + misc */
-         /* <section className="actions-section">
-            <div className="actions-group">
-              <div className="actions-group-label">Lances Livres</div>
-              <div className="actions-row">
-                {FT_ACTIONS.map(a=>(
-                  <button key={a.id} className="action-btn" style={{'--ac':a.color}} onClick={()=>applyFT(a)}>{a.label}</button>
-                ))}
-                {inBonus && (
-                  <button className="action-btn bonus-ft-btn" onClick={()=>setFtModal('pick_player')}>
-                    LL Bonif.
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="actions-group">
-              <div className="actions-group-label">Outras Ações</div>
-              <div className="actions-row wrap">
-                {MISC_ACTIONS.map(a=>(
-                  <button key={a.id} className="action-btn" style={{'--ac':a.color}} onClick={()=>applyMisc(a)}>{a.label}</button>
-                ))}
-              </div>
-            </div>
-          </section> */
         </main>
       )}
 
