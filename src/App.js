@@ -1044,7 +1044,7 @@ export default function App() {
             </svg>
           </div>
           <div className="home-title">WinFast Basketball Scout</div>
-          <div className="home-sub">Análise ao vivo · Open Source · PWA</div>
+          <div className="home-sub">Análise ao vivo · Open Source · PWA </div>
         </div>
         <button className="btn-new-game" onClick={()=>setShowNewGame(true)}>+ Novo Jogo</button>
         {games.length > 0 && (
