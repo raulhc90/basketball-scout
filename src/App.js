@@ -1108,8 +1108,8 @@ setSelectedPlayerB(null);
   // ── Falta ──────────────────────────────────────────────────────────────────
   const commitFoul = useCallback((foulType, isTech) => {
 
-    if (playerIdx === null) return;
     const playerIdx = getSelectedPlayer(activeTeam);
+    if (playerIdx === null) return;
     const pl = game.teams[activeTeam].players[playerIdx];
     const newFouls     = (pl.fouls     || 0) + 1;
     const newTechFouls = isTech ? (pl.techFouls || 0) + 1 : (pl.techFouls || 0);
@@ -1133,7 +1133,7 @@ setSelectedPlayerB(null);
         return {
           ...t,
           players: t.players.map((p, pi) => {
-            if (pi !== selectedPlayer) return p;
+            if (pi !== playerIdx) return p;
             return { ...p, fouls: newFouls, techFouls: newTechFouls, active: isDisq ? false : p.active };
           })
         };
@@ -1151,7 +1151,7 @@ setSelectedPlayerB(null);
       const reason = isDisq
         ? `#${pl.number} ${pl.name.split(' ')[0]} atingiu ${newFouls} faltas — DISQUALIFICADO`
         : `#${pl.number} ${pl.name.split(' ')[0]} atingiu ${newTechFouls} técnicas — substituição obrigatória`;
-      setSubModal({ reason, outIdx: selectedPlayer, canCancel: false });
+      setSubModal({ reason, outIdx: playerIdx, canCancel: false });
     } else if (nowBonus) {
       // Bonificação: abre LL imediatamente
       setFtModal('pick_player');
@@ -1412,21 +1412,29 @@ if (action.id === 'stl') {
 }
 
   // 6. resto das ações (stats simples)
-  setGameWithUndo(g => {
-    const teams = g.teams.map((t, ti) => {
-      if (ti !== activeTeam) return t;
+      setGameWithUndo(g => {
+      const playerIdx = getSelectedPlayer(activeTeam);
 
-      return {
-        ...t,
-        players: t.players.map((p, pi) => {
-          if (pi !== selectedPlayer) return p;
-          return {
-            ...p,
-            [action.id]: (p[action.id] || 0) + 1
-          };
-        })
-      };
-    });
+          if (playerIdx === null) return g;
+
+            const teams = g.teams.map((t, ti) => {
+            if (ti !== activeTeam) return t;
+
+            return {
+              ...t,
+              players: t.players.map((p, pi) => {
+                if (pi !== playerIdx) return p;
+
+                return {
+                  ...p,
+                  [action.id]: (p[action.id] || 0) + 1
+                };
+              })
+            };
+          });
+
+          return { ...g, teams };
+      });
 
     const pl = g.teams[activeTeam].players[getSelectedPlayer(activeTeam)];
 
@@ -1448,13 +1456,18 @@ if (action.id === 'stl') {
     };
   });
 
-}, [selectedPlayer, activeTeam, setGameWithUndo]);
-  const playerIdx = getSelectedPlayer(activeTeam);
-  const applyFT = useCallback(action => {
-    if (playerIdx  === null) { showToast('Selecione um atleta'); return; }
-    // LL manual: vai para o time do atleta selecionado (sem falta coletiva)
-    commitFT(activeTeam, selectedPlayer, action.id === 'ftm');
-  }, [selectedPlayer, activeTeam, commitFT]);
+}, [activeTeam, setGameWithUndo]);
+
+    const applyFT = useCallback(action => {
+      const playerIdx = getSelectedPlayer(activeTeam);
+
+      if (playerIdx === null) {
+        showToast('Selecione um atleta');
+        return;
+      }
+
+      commitFT(activeTeam, playerIdx, action.id === 'ftm');
+    }, [activeTeam, commitFT]);
 
   // ─── HOME ──────────────────────────────────────────────────────────────────
   if (screen === 'home') return (
@@ -1505,7 +1518,8 @@ if (action.id === 'stl') {
 
   // ─── GAME ──────────────────────────────────────────────────────────────────
   const td  = game.teams[activeTeam];
-  const sp  = selectedPlayer !== null ? td.players[getSelectedPlayer(activeTeam)] : null;
+  const playerIdx = getSelectedPlayer(activeTeam);
+  const sp = playerIdx !== null ? td.players[playerIdx] : null;
   const activeShots = sp ? (sp.shots||[]) : td.players.flatMap(p => p.shots||[]);
   const tfq = (game.teamFouls?.[activeTeam] || [])[game.quarter] || 0;
   const inBonus = tfq >= TEAM_FOUL_BONUS;
@@ -1521,11 +1535,13 @@ if (action.id === 'stl') {
           inPaint={confirmShot.inPaint}
           onMade={(shotType) => {
             const s = confirmShot; setConfirmShot(null);
-            setAssistPending({ scorerIdx: selectedPlayer, xPct: s.xPct, yPct: s.yPct, made: true, three: s.three, shotType });
+            const playerIdx = getSelectedPlayer(activeTeam);
+            setAssistPending({ scorerIdx: playerIdx, xPct: s.xPct, yPct: s.yPct, made: true, three: s.three, shotType });
           }}
           onMissed={(shotType) => {
             const s = confirmShot; setConfirmShot(null);
-            commitShot(selectedPlayer, s.xPct, s.yPct, false, s.three, null, shotType);
+            const playerIdx = getSelectedPlayer(activeTeam);
+            commitShot(playerIdx, s.xPct, s.yPct, false, s.three, null, shotType);
           }}
           onCancel={() => setConfirmShot(null)}
         />
