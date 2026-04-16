@@ -1428,7 +1428,7 @@ if (action.id === 'stl') {
       };
     });
 
-    const pl = g.teams[activeTeam].players[getSelectedPlayer(activeTeam)]];
+    const pl = g.teams[activeTeam].players[getSelectedPlayer(activeTeam)];
 
     const entry = {
       id: Date.now(),
