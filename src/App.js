@@ -1362,81 +1362,66 @@ const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, s
   // ── Ações miscellâneas ─────────────────────────────────────────────────────
 const applyMisc = useCallback(action => {
 
-  // 1. valida jogador
-const player = getSelectedPlayer(activeTeam);
-if (player === null) {
+  const playerIdx = getSelectedPlayer(activeTeam);
+
+  if (playerIdx === null) {
     showToast('Selecione um atleta');
     return;
   }
 
-  // 2. faltas (modal)
+  // FALTAS
   if (action.id === 'fouls') {
     setFoulPending(true);
     return;
   }
 
-  // 🔥 3. TURNOVER (AQUI!)
+  // TURNOVER
   if (action.id === 'to') {
     setGameWithUndo(g => endPossession(g, 1 - activeTeam));
     setActiveTeam(1 - activeTeam);
     return;
   }
 
-  // 🔥 4. REBOTE
-if (action.id === 'reb' || action.id === 'oreb') {
+  // REBOTE
+  if (action.id === 'reb' || action.id === 'oreb') {
+    setGameWithUndo(g => {
+      const isOffensive = action.id === 'oreb';
 
+      if (!isOffensive) {
+        return endPossession(g, activeTeam, playerIdx);
+      }
+
+      return g;
+    });
+    return;
+  }
+
+  // ROUBO
+  if (action.id === 'stl') {
+    setGameWithUndo(g => endPossession(g, activeTeam, playerIdx));
+    return;
+  }
+
+  // OUTRAS AÇÕES
   setGameWithUndo(g => {
 
-    const isOffensive = action.id === 'oreb';
+    const teams = g.teams.map((t, ti) => {
+      if (ti !== activeTeam) return t;
 
-    // 👉 rebote defensivo = nova posse
-    if (!isOffensive) {
-      const playerIdx = getSelectedPlayer(activeTeam);
-      return endPossession(g, activeTeam, playerIdx);
-    }
+      return {
+        ...t,
+        players: t.players.map((p, pi) => {
+          if (pi !== playerIdx) return p;
 
-    // 👉 rebote ofensivo = mesma posse
-    return g;
-  });
+          return {
+            ...p,
+            [action.id]: (p[action.id] || 0) + 1
+          };
+        })
+      };
+    });
 
-  return;
-}
-
-  // 🔥 5. ROUBO
-if (action.id === 'stl') {
-  const playerIdx = getSelectedPlayer(activeTeam);
-
-  if (playerIdx === null) return;
-
-  setGameWithUndo(g => endPossession(g, activeTeam, playerIdx));
-  return;
-}
-
-  // 6. resto das ações (stats simples)
-      setGameWithUndo(g => {
-      const playerIdx = getSelectedPlayer(activeTeam);
-
-          if (playerIdx === null) return g;
-
-            const teams = g.teams.map((t, ti) => {
-            if (ti !== activeTeam) return t;
-
-            return {
-              ...t,
-              players: t.players.map((p, pi) => {
-                if (pi !== playerIdx) return p;
-
-                return {
-                  ...p,
-                  [action.id]: (p[action.id] || 0) + 1
-                };
-              })
-            };
-          });
-          const pl = g.teams[activeTeam].players[getSelectedPlayer(activeTeam)];
-          return { ...g, teams };
-      });
-
+    const pl = g.teams[activeTeam].players[playerIdx];
 
     const entry = {
       id: Date.now(),
