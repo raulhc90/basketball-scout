@@ -723,7 +723,13 @@ export default function App() {
   const [game, setGame]       = useState(null);
   const [running, setRunning] = useState(false);
   const [activeTeam, setActiveTeam]         = useState(0);
-  const [selectedPlayer, setSelectedPlayer] = useState(null);
+  const [selectedPlayerA, setSelectedPlayerA] = useState(null);
+  const [selectedPlayerB, setSelectedPlayerB] = useState(null);
+
+    const getSelectedPlayer = (teamIdx) => {
+        return teamIdx === 0 ? selectedPlayerA : selectedPlayerB;
+    };
+
   const [view, setView]       = useState('scout');
   const [toast, setToast]     = useState(null);
   const [showNewGame, setShowNewGame] = useState(false);
@@ -753,162 +759,94 @@ export default function App() {
 
 const renderTeamPanel = (teamIdx) => {
   const team = game.teams[teamIdx];
+  const selectedPlayer = getSelectedPlayer(teamIdx);
 
   return (
     <div className="team-panel">
-      <div className="team-title">
-        {team.name}
-      </div>
+      <div className="team-title">{team.name}</div>
 
+      {/* 🔹 JOGADORES */}
       <div className="players-grid">
         {team.players.map((p, pi) => (
           <button
             key={pi}
             className="player-btn"
-            data-active={activeTeam === teamIdx && selectedPlayer === pi}
+            data-active={
+              teamIdx === 0
+                ? selectedPlayerA === pi
+                : selectedPlayerB === pi
+            }
             data-bench={!p.active}
             data-trouble={p.fouls >= FOUL_TROUBLE && p.fouls < FOUL_DISQUALIFY}
             data-disq={p.fouls >= FOUL_DISQUALIFY || (p.techFouls || 0) >= TECH_DISQUALIFY}
-            data-drag-over={
-              dragPlayer !== null &&
-              dragPlayer !== pi &&
-              (
-                (team.players[dragPlayer]?.active && !p.active) ||
-                (!team.players[dragPlayer]?.active && p.active)
-              )
-            }
             onClick={() => {
               setActiveTeam(teamIdx);
-              setSelectedPlayer(pi);
-            }}
-            draggable
-            onDragStart={() => setDragPlayer(pi)}
-            onDragEnd={() => setDragPlayer(null)}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={() => {
-              if (dragPlayer === null || dragPlayer === pi) return;
 
-              const src = team.players[dragPlayer];
-              const dst = team.players[pi];
-
-              // não permite troca inválida
-              if (src.active === dst.active) {
-                showToast('Arraste em quadra → reserva');
-                setDragPlayer(null);
-                return;
-              }
-
-              const outIdx = src.active ? dragPlayer : pi;
-              const inIdx  = src.active ? pi : dragPlayer;
-
-              setSubModal({
-                reason: null,
-                outIdx,
-                directInIdx: inIdx,
-                canCancel: true
-              });
-
-              setDragPlayer(null);
+              if (teamIdx === 0) setSelectedPlayerA(pi);
+              else setSelectedPlayerB(pi);
             }}
           >
             <span className="pnum">#{p.number}</span>
             <span className="pname">{p.name.split(' ')[0]}</span>
             <span className="ppts">{p.pts}p</span>
-
-            {p.fouls > 0 && (
-              <span
-                className="pfoul-badge"
-                data-trouble={
-                  p.fouls >= FOUL_TROUBLE &&
-                  p.fouls < FOUL_DISQUALIFY &&
-                  (p.techFouls || 0) < TECH_DISQUALIFY
-                }
-                data-disq={
-                  p.fouls >= FOUL_DISQUALIFY ||
-                  (p.techFouls || 0) >= TECH_DISQUALIFY
-                }
-              >
-                {p.fouls}f{p.techFouls > 0 ? `+${p.techFouls}t` : ''}
-              </span>
-            )}
           </button>
         ))}
       </div>
 
-      {/* 🔥 AÇÕES DO TIME */}
+      {/* 🔥 AÇÕES */}
+      <section className="actions-section">
 
-      <div className="actions">
+        {/* LANCES LIVRES */}
+        <div className="actions-group">
+          <div className="actions-group-label">Lances Livres</div>
 
-          {/* ARREMESSOS */}
-          <button onClick={() => {
-            setActiveTeam(teamIdx);
-            selectedPlayer !== null
-              ? commitShot(selectedPlayer, null, null, true, false)
-              : showToast('Selecione um atleta');
-          }}>+2</button>
+          <div className="actions-row">
+            <button className="action-btn" style={{ '--ac': '#f59e0b' }}
+              onClick={() => {
+                const playerIdx = getSelectedPlayer(teamIdx);
 
-          <button onClick={() => {
-            setActiveTeam(teamIdx);
-            selectedPlayer !== null
-              ? commitShot(selectedPlayer, null, null, true, true)
-              : showToast('Selecione um atleta');
-          }}>+3</button>
+                if (playerIdx === null) {
+                  showToast('Selecione um atleta');
+                  return;
+                }
 
-          {/* LANCE LIVRE */}
-          <button onClick={() => {
-            setActiveTeam(teamIdx);
-            if (selectedPlayer !== null) {
-              commitFT(teamIdx, selectedPlayer, true);
-            } else showToast('Selecione um atleta');
-          }}>LL ✔</button>
+                setActiveTeam(teamIdx);
+                commitFT(teamIdx, playerIdx, true);
+              }} > LL ✔
+            </button>
 
-          <button onClick={() => {
-            setActiveTeam(teamIdx);
-            if (selectedPlayer !== null) {
-              commitFT(teamIdx, selectedPlayer, false);
-            } else showToast('Selecione um atleta');
-          }}>LL ✖</button>
+            <button className="action-btn" style={{ '--ac': '#64748b' }}
+              onClick={() => {
+                const playerIdx = getSelectedPlayer(teamIdx);
 
-          {/* POSSE / DEFESA */}
-          <button onClick={() => {
-            setActiveTeam(teamIdx);
-            applyMisc({ id: 'reb' });
-          }}>REB</button>
+                if (playerIdx === null) {
+                  showToast('Selecione um atleta');
+                  return;
+                }
 
-          <button onClick={() => {
-            setActiveTeam(teamIdx);
-            applyMisc({ id: 'oreb' });
-          }}>OREB</button>
-
-          <button onClick={() => {
-            setActiveTeam(teamIdx);
-            applyMisc({ id: 'stl' });
-          }}>STL</button>
-
-          <button onClick={() => {
-            setActiveTeam(teamIdx);
-            applyMisc({ id: 'blk' });
-          }}>BLK</button>
-
-          {/* TURNOVER */}
-          <button onClick={() => {
-            setActiveTeam(teamIdx);
-            applyMisc({ id: 'to' });
-          }}>TO</button>
-
-          {/* FALTAS */}
-          <button onClick={() => {
-            setActiveTeam(teamIdx);
-            applyMisc({ id: 'fouls' });
-          }}>Falta</button>
-
-          <button onClick={() => {
-            setActiveTeam(teamIdx);
-            applyMisc({ id: 'foulsReceived' });
-          }}>Falta Sofrida</button>
-
+                setActiveTeam(teamIdx);
+                commitFT(teamIdx, playerIdx, false);
+              }} > LL ✖
+            </button>
+          </div>
         </div>
 
+        {/* OUTRAS */}
+        <div className="actions-group">
+          <div className="actions-group-label">Outras Ações</div>
+
+          <div className="actions-row wrap">
+            <button className="action-btn" style={{ '--ac': '#06b6d4' }} onClick={() => { setActiveTeam(teamIdx); applyMisc({ id: 'reb' }); }}>REB</button>
+            <button className="action-btn" style={{ '--ac': '#0ea5e9' }} onClick={() => { setActiveTeam(teamIdx); applyMisc({ id: 'oreb' }); }}>OREB</button>
+            <button className="action-btn" style={{ '--ac': '#22c55e' }} onClick={() => { setActiveTeam(teamIdx); applyMisc({ id: 'stl' }); }}>STL</button>
+            <button className="action-btn" style={{ '--ac': '#a855f7' }} onClick={() => { setActiveTeam(teamIdx); applyMisc({ id: 'blk' }); }}>BLK</button>
+            <button className="action-btn" style={{ '--ac': '#ef4444' }} onClick={() => { setActiveTeam(teamIdx); applyMisc({ id: 'to' }); }}>TO</button>
+            <button className="action-btn" style={{ '--ac': '#f97316' }} onClick={() => { setActiveTeam(teamIdx); applyMisc({ id: 'fouls' }); }}>Falta</button>
+            <button className="action-btn" style={{ '--ac': '#8b5cf6' }} onClick={() => { setActiveTeam(teamIdx); applyMisc({ id: 'foulsReceived' }); }}>Falta Sofrida</button>
+          </div>
+        </div>
+
+      </section>
     </div>
   );
 };
@@ -1066,7 +1004,8 @@ const startGame = (nameA, nameB, rosterA, rosterB, startingTeam) => {
 
   setActiveTeam(startingTeam);
 
-  setSelectedPlayer(null);
+setSelectedPlayerA(null);
+setSelectedPlayerB(null);
   setRunning(true);
 };
 
@@ -1074,7 +1013,7 @@ const startGame = (nameA, nameB, rosterA, rosterB, startingTeam) => {
     // Compatibilidade: jogos antigos sem possessions
     const patched = g.possessions ? g : { ...g, possessions: [0,0] };
     setGame(patched); setScreen('game'); setView('scout');
-    setActiveTeam(0); setSelectedPlayer(null); setRunning(false); };
+    setActiveTeam(0); setSelectedPlayerA(null);setSelectedPlayerB(null);setRunning(false); };
 
   // Avança quarto — zera faltas coletivas (exceto OT que continua)
   const nextQuarter = useCallback(() => {
@@ -1136,7 +1075,8 @@ const startGame = (nameA, nameB, rosterA, rosterB, startingTeam) => {
     const inn = game.teams[activeTeam].players[inIdx];
     showToast(`↕ ${out.name.split(' ')[0]} → ${inn.name.split(' ')[0]}`);
     setSubModal(null);
-    setSelectedPlayer(null);
+setSelectedPlayerA(null);
+setSelectedPlayerB(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game, subModal, activeTeam]);
 
@@ -1161,12 +1101,14 @@ const startGame = (nameA, nameB, rosterA, rosterB, startingTeam) => {
     const inn = game.teams[activeTeam].players[inIdx];
     showToast(`↕ ${out.name.split(' ')[0]} → ${inn.name.split(' ')[0]}`);
     setSubModal(null);
-    setSelectedPlayer(null);
+setSelectedPlayerA(null);
+setSelectedPlayerB(null);
   }, [game, activeTeam]);
 
   // ── Falta ──────────────────────────────────────────────────────────────────
   const commitFoul = useCallback((foulType, isTech) => {
-    if (selectedPlayer === null || !game) return;
+    const playerIdx = getSelectedPlayer(activeTeam);
+    if (playerIdx === null) return;
     const pl = game.teams[activeTeam].players[selectedPlayer];
     const newFouls     = (pl.fouls     || 0) + 1;
     const newTechFouls = isTech ? (pl.techFouls || 0) + 1 : (pl.techFouls || 0);
@@ -1395,12 +1337,17 @@ const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, s
   if (made) showToast(`+${pts}${assistIdx !== null ? ' + assist' : ''}`);
   setAssistPending(null);
 
+if (made) {
+  setActiveTeam(1 - activeTeam);
+}
+
 }, [activeTeam, setGameWithUndo]);
 
   // ── Clique na quadra ───────────────────────────────────────────────────────
   // Sempre ativo quando há atleta selecionado — não precisa clicar em "+ Marcar"
   const handleCourtClick = useCallback(e => {
-    if (selectedPlayer === null) return;
+    const player = activeTeam === 0 ? selectedPlayerA : selectedPlayerB;
+    if (player === null) return;
     if (confirmShot || assistPending || foulPending || ftModal || subModal) return;
     if (game?.finished) { showToast('Jogo finalizado'); return; }
     // Só registra se o cronômetro estiver rodando
@@ -1500,9 +1447,9 @@ if (action.id === 'stl') {
   });
 
 }, [selectedPlayer, activeTeam, setGameWithUndo]);
-
+  const playerIdx = getSelectedPlayer(activeTeam);
   const applyFT = useCallback(action => {
-    if (selectedPlayer === null) { showToast('Selecione um atleta'); return; }
+    if (playerIdx  === null) { showToast('Selecione um atleta'); return; }
     // LL manual: vai para o time do atleta selecionado (sem falta coletiva)
     commitFT(activeTeam, selectedPlayer, action.id === 'ftm');
   }, [selectedPlayer, activeTeam, commitFT]);
@@ -1669,7 +1616,8 @@ if (action.id === 'stl') {
 
         <div className="scoreboard">
           <div className="team-score" data-active={activeTeam===0}
-            onClick={() => { setActiveTeam(0); setSelectedPlayer(null); }}>
+            onClick={() => { setActiveTeam(0);setSelectedPlayerA(null);
+setSelectedPlayerB(null); }}>
             <span className="team-name">{game.teams[0].name}</span>
             <span className="score">{game.teams[0].score}</span>
             <div className="team-foul-dots">
@@ -1708,7 +1656,8 @@ if (action.id === 'stl') {
           </div>
 
           <div className="team-score right" data-active={activeTeam===1}
-            onClick={() => { setActiveTeam(1); setSelectedPlayer(null); }}>
+            onClick={() => { setActiveTeam(1); setSelectedPlayerA(null);
+setSelectedPlayerB(null); }}>
             <span className="score">{game.teams[1].score}</span>
             <span className="team-name">{game.teams[1].name}</span>
             <div className="team-foul-dots">
@@ -1761,7 +1710,8 @@ if (action.id === 'stl') {
           <div className="team-tabs">
             {game.teams.map((t,ti)=>(
               <button key={ti} className="team-tab" data-active={activeTeam===ti}
-                onClick={() => { setActiveTeam(ti); setSelectedPlayer(null); }}>
+                onClick={() => { setActiveTeam(ti); setSelectedPlayerA(null);
+setSelectedPlayerB(null); }}>
                 {t.name} <span className="tab-score">{t.score}</span>
               </button>
             ))}
@@ -1776,7 +1726,7 @@ if (action.id === 'stl') {
                 </button>
                 <button className="sub-quick-btn"
                   onClick={() => {
-                    if (selectedPlayer === null) { showToast('Selecione o atleta que SAI'); return; }
+                    if (playerIdx  === null) { showToast('Selecione o atleta que SAI'); return; }
                     setSubModal({ reason: null, outIdx: selectedPlayer, canCancel: true });
                   }}>
                   ↕ Sub
@@ -1839,7 +1789,7 @@ if (action.id === 'stl') {
           </section>
 
           {/* Ações — sem botões 2pts/3pts, somente LL + misc */}
-          <section className="actions-section">
+         /* <section className="actions-section">
             <div className="actions-group">
               <div className="actions-group-label">Lances Livres</div>
               <div className="actions-row">
@@ -1861,7 +1811,7 @@ if (action.id === 'stl') {
                 ))}
               </div>
             </div>
-          </section>
+          </section> */
         </main>
       )}
 
