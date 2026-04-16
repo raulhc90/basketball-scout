@@ -1159,7 +1159,7 @@ setSelectedPlayerB(null);
       showToast(`Foul trouble — ${pl.name.split(' ')[0]} (${newFouls} faltas)`);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPlayer, activeTeam, game, setGameWithUndo]);
+  }, [selectedPlayerA, selectedPlayerB, activeTeam, game, setGameWithUndo]);
 
   // ── Lance Livre ────────────────────────────────────────────────────────────
   // ftTeamIdx: time que ARREMESSA (adversário de quem fez a falta)
@@ -1338,10 +1338,6 @@ const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, s
   if (made) showToast(`+${pts}${assistIdx !== null ? ' + assist' : ''}`);
   setAssistPending(null);
 
-if (made) {
-  setActiveTeam(1 - activeTeam);
-}
-
 }, [activeTeam, setGameWithUndo]);
 
   // ── Clique na quadra ───────────────────────────────────────────────────────
@@ -1361,7 +1357,7 @@ if (made) {
     const { valid, three, inPaint } = classifyShot(xPct, yPct, dir);
     if (!valid) { showToast('Arremesso no lado errado da quadra'); return; }
     setConfirmShot({ xPct, yPct, three, inPaint });
-  }, [selectedPlayer, confirmShot, assistPending, foulPending, ftModal, subModal, running, activeTeam, game]);
+  }, [selectedPlayerA, selectedPlayerB, confirmShot, assistPending, foulPending, ftModal, subModal, running, activeTeam, game]);
 
   // ── Ações miscellâneas ─────────────────────────────────────────────────────
 const applyMisc = useCallback(action => {
@@ -1395,7 +1391,8 @@ if (action.id === 'reb' || action.id === 'oreb') {
 
     // 👉 rebote defensivo = nova posse
     if (!isOffensive) {
-      return endPossession(g, activeTeam, selectedPlayer);
+      const playerIdx = getSelectedPlayer(activeTeam);
+      return endPossession(g, activeTeam, playerIdx);
     }
 
     // 👉 rebote ofensivo = mesma posse
@@ -1407,7 +1404,11 @@ if (action.id === 'reb' || action.id === 'oreb') {
 
   // 🔥 5. ROUBO
 if (action.id === 'stl') {
-  setGameWithUndo(g => endPossession(g, activeTeam, selectedPlayer));
+  const playerIdx = getSelectedPlayer(activeTeam);
+
+  if (playerIdx === null) return;
+
+  setGameWithUndo(g => endPossession(g, activeTeam, playerIdx));
   return;
 }
 
@@ -1432,11 +1433,10 @@ if (action.id === 'stl') {
               })
             };
           });
-
+          const pl = g.teams[activeTeam].players[getSelectedPlayer(activeTeam)];
           return { ...g, teams };
       });
 
-    const pl = g.teams[activeTeam].players[getSelectedPlayer(activeTeam)];
 
     const entry = {
       id: Date.now(),
@@ -1744,8 +1744,14 @@ setSelectedPlayerB(null); }}>
                 </button>
                 <button className="sub-quick-btn"
                   onClick={() => {
-                    if (playerIdx  === null) { showToast('Selecione o atleta que SAI'); return; }
-                    setSubModal({ reason: null, outIdx: selectedPlayer, canCancel: true });
+                    const playerIdx = getSelectedPlayer(activeTeam);
+
+                    if (playerIdx === null) {
+                      showToast('Selecione o atleta que SAI');
+                      return;
+                    }
+
+                    setSubModal({ reason: null, outIdx: playerIdx, canCancel: true });
                   }}>
                   ↕ Sub
                 </button>
@@ -1771,12 +1777,12 @@ setSelectedPlayerB(null); }}>
           {/* Mapa — clique direto quando atleta selecionado */}
           <section className="court-section">
             <div className="court-section-header">
-              <div className="section-label" style={{padding:'8px 0 0'}}>
-                {selectedPlayer !== null
-                  ? `Toque na quadra — #${sp?.number} ${sp?.name.split(' ')[0]}`
-                  : `Mapa — selecione um atleta para marcar`}
-              </div>
-              {selectedPlayer !== null && (
+                <div className="section-label" style={{padding:'8px 0 0'}}>
+                    {getSelectedPlayer(activeTeam) !== null
+                    ? `Toque na quadra — #${sp?.number} ${sp?.name.split(' ')[0]}`
+                    : `Mapa — selecione um atleta para marcar`}
+                </div>
+              {getSelectedPlayer(activeTeam) !== null && (
                 <div className="court-active-badge">● ao vivo</div>
               )}
             </div>
@@ -1784,14 +1790,14 @@ setSelectedPlayerB(null); }}>
 
               {renderTeamPanel(0)}
 
-              <div className="court-container">
-                <BasketballCourt
-                  shots={activeShots}
-                  onCourtClick={handleCourtClick}
-                  hasPlayer={selectedPlayer !== null}
-                  attackDir={activeTeam === 0 ? 'right' : 'left'}
-                />
-              </div>
+                <div className="court-container">
+                  <BasketballCourt
+                    shots={activeShots}
+                    onCourtClick={handleCourtClick}
+                    hasPlayer={playerIdx !== null}
+                    attackDir={activeTeam === 0 ? 'right' : 'left'}
+                  />
+                </div>
 
               {renderTeamPanel(1)}
 
