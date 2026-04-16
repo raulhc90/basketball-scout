@@ -1299,7 +1299,7 @@ export default function App() {
             </div>
           </div>
         </div>
-        {inBonus&&<div className="bonus-bar">BONIFICAÇÃO — {game.teams[activeTeam].name} ({tfq} faltas no {getQuarterLabel(game.quarter)})</div>}
+        {inBonus&&<div className="bonus-bar">BONIFICAÇÃO — {game.teams[activeTeam].name} ({tfq} faltas no {getQuarterLabel(game.quarter)})}
         <nav className="nav">
           {[['scout','Scout'],['stats','Stats'],['heatmap','Mapa'],['log','Log']].map(([v,l])=>(
             <button key={v} className="nav-btn" data-active={view===v} onClick={()=>setView(v)}>{l}</button>
