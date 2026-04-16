@@ -837,7 +837,7 @@ const renderTeamPanel = (teamIdx) => {
           <div className="actions-row">
             <button className="action-btn" style={{ '--ac': '#f59e0b' }}
               onClick={() => {
-                const playerIdx = getSelectedPlayer(teamIdx);
+                const playerIdx = activeTeam === 0 ? selectedPlayerA : selectedPlayerB;
 
                 if (playerIdx === null) {
                   showToast('Selecione um atleta');
@@ -851,7 +851,7 @@ const renderTeamPanel = (teamIdx) => {
 
             <button className="action-btn" style={{ '--ac': '#64748b' }}
               onClick={() => {
-                const playerIdx = getSelectedPlayer(teamIdx);
+                const playerIdx = activeTeam === 0 ? selectedPlayerA : selectedPlayerB;
 
                 if (playerIdx === null) {
                   showToast('Selecione um atleta');
@@ -1142,7 +1142,7 @@ setSelectedPlayerB(null);
   // ── Falta ──────────────────────────────────────────────────────────────────
   const commitFoul = useCallback((foulType, isTech) => {
 
-    const playerIdx = getSelectedPlayer(activeTeam);
+    const playerIdx = activeTeam === 0 ? selectedPlayerA : selectedPlayerB;
     if (playerIdx === null) return;
     const pl = game.teams[activeTeam].players[playerIdx];
     const newFouls     = (pl.fouls     || 0) + 1;
@@ -1372,7 +1372,7 @@ const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, s
   if (made) showToast(`+${pts}${assistIdx !== null ? ' + assist' : ''}`);
   setAssistPending(null);
 
-}, [activeTeam, setGameWithUndo,getSelectedPlayer]);
+}, [activeTeam, setGameWithUndo]);
 
   // ── Clique na quadra ───────────────────────────────────────────────────────
   // Sempre ativo quando há atleta selecionado — não precisa clicar em "+ Marcar"
@@ -1396,7 +1396,7 @@ const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, s
   // ── Ações miscellâneas ─────────────────────────────────────────────────────
 const applyMisc = useCallback(action => {
 
-  const playerIdx = getSelectedPlayer(activeTeam);
+  const playerIdx = activeTeam === 0 ? selectedPlayerA : selectedPlayerB;
 
   if (playerIdx === null) {
     showToast('Selecione um atleta');
@@ -1475,10 +1475,10 @@ const applyMisc = useCallback(action => {
     };
   });
 
-}, [activeTeam, setGameWithUndo,getSelectedPlayer]);
+}, [activeTeam, setGameWithUndo]);
 
     const applyFT = useCallback(action => {
-      const playerIdx = getSelectedPlayer(activeTeam);
+      const playerIdx = activeTeam === 0 ? selectedPlayerA : selectedPlayerB;
 
       if (playerIdx === null) {
         showToast('Selecione um atleta');
@@ -1537,7 +1537,7 @@ const applyMisc = useCallback(action => {
 
   // ─── GAME ──────────────────────────────────────────────────────────────────
   const td  = game.teams[activeTeam];
-  const playerIdx = getSelectedPlayer(activeTeam);
+  const playerIdx = activeTeam === 0 ? selectedPlayerA : selectedPlayerB;
   const sp = playerIdx !== null ? td.players[playerIdx] : null;
   const activeShots = sp ? (sp.shots||[]) : td.players.flatMap(p => p.shots||[]);
   const tfq = (game.teamFouls?.[activeTeam] || [])[game.quarter] || 0;
@@ -1554,12 +1554,12 @@ const applyMisc = useCallback(action => {
           inPaint={confirmShot.inPaint}
           onMade={(shotType) => {
             const s = confirmShot; setConfirmShot(null);
-            const playerIdx = getSelectedPlayer(activeTeam);
+            const playerIdx = activeTeam === 0 ? selectedPlayerA : selectedPlayerB;
             setAssistPending({ scorerIdx: playerIdx, xPct: s.xPct, yPct: s.yPct, made: true, three: s.three, shotType });
           }}
           onMissed={(shotType) => {
             const s = confirmShot; setConfirmShot(null);
-            const playerIdx = getSelectedPlayer(activeTeam);
+            const playerIdx = activeTeam === 0 ? selectedPlayerA : selectedPlayerB;
             commitShot(playerIdx, s.xPct, s.yPct, false, s.three, null, shotType);
           }}
           onCancel={() => setConfirmShot(null)}
@@ -1763,7 +1763,7 @@ setSelectedPlayerB(null); }}>
                 </button>
                 <button className="sub-quick-btn"
                   onClick={() => {
-                    const playerIdx = getSelectedPlayer(activeTeam);
+                    const playerIdx = activeTeam === 0 ? selectedPlayerA : selectedPlayerB;
 
                     if (playerIdx === null) {
                       showToast('Selecione o atleta que SAI');
