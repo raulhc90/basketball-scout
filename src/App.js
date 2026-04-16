@@ -767,30 +767,64 @@ const renderTeamPanel = (teamIdx) => {
 
       {/* 🔹 JOGADORES */}
       <div className="players-grid">
-        {team.players.map((p, pi) => (
-          <button
-            key={pi}
-            className="player-btn"
-            data-active={
-              teamIdx === 0
-                ? selectedPlayerA === pi
-                : selectedPlayerB === pi
-            }
-            data-bench={!p.active}
-            data-trouble={p.fouls >= FOUL_TROUBLE && p.fouls < FOUL_DISQUALIFY}
-            data-disq={p.fouls >= FOUL_DISQUALIFY || (p.techFouls || 0) >= TECH_DISQUALIFY}
-            onClick={() => {
-              setActiveTeam(teamIdx);
+          {team.players.map((p, pi) => (
+            <button
+              key={pi}
+              className="player-btn"
 
-              if (teamIdx === 0) setSelectedPlayerA(pi);
-              else setSelectedPlayerB(pi);
-            }}
-          >
-            <span className="pnum">#{p.number}</span>
-            <span className="pname">{p.name.split(' ')[0]}</span>
-            <span className="ppts">{p.pts}p</span>
-          </button>
-        ))}
+              data-active={
+                teamIdx === 0
+                  ? selectedPlayerA === pi
+                  : selectedPlayerB === pi
+              }
+              data-bench={!p.active}
+              data-trouble={p.fouls >= FOUL_TROUBLE && p.fouls < FOUL_DISQUALIFY}
+              data-disq={p.fouls >= FOUL_DISQUALIFY || (p.techFouls || 0) >= TECH_DISQUALIFY}
+
+              draggable
+
+              onClick={() => {
+                setActiveTeam(teamIdx);
+                if (teamIdx === 0) setSelectedPlayerA(pi);
+                else setSelectedPlayerB(pi);
+              }}
+
+              onDragStart={() => setDragPlayer(pi)}
+              onDragEnd={() => setDragPlayer(null)}
+
+              onDragOver={(e) => e.preventDefault()}
+
+              onDrop={() => {
+                if (dragPlayer === null || dragPlayer === pi) return;
+
+                const src = team.players[dragPlayer];
+                const dst = team.players[pi];
+
+                // só permite troca entre titular e reserva
+                if (src.active === dst.active) {
+                  showToast('Arraste titular ↔ reserva');
+                  setDragPlayer(null);
+                  return;
+                }
+
+                const outIdx = src.active ? dragPlayer : pi;
+                const inIdx  = src.active ? pi : dragPlayer;
+
+                setSubModal({
+                  reason: null,
+                  outIdx,
+                  directInIdx: inIdx,
+                  canCancel: true
+                });
+
+                setDragPlayer(null);
+              }}
+            >
+              <span className="pnum">#{p.number}</span>
+              <span className="pname">{p.name.split(' ')[0]}</span>
+              <span className="ppts">{p.pts}p</span>
+            </button>
+          ))}
       </div>
 
       {/* 🔥 AÇÕES */}
