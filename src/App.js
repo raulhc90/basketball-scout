@@ -1085,6 +1085,7 @@ export default function App() {
     const pIdx = teamIdx===0 ? selectedPlayerA : selectedPlayerB;
     return (
       <div className="team-panel">
+        <div className="team-title">{team.name}</div>
         <div className="players-grid">
           {team.players.map((p,pi)=>(
             <button key={pi} className="player-btn"
@@ -1207,135 +1208,65 @@ export default function App() {
       )}
 
       {/* Header */}
-        <header className="header">
-
-          {/* TOPO */}
-          <div className="header-top">
-            <button className="back-btn" onClick={()=>{setRunning(false);setScreen('home');}}>
-              ‹ Voltar
-            </button>
-
-            <div className="header-game-label">
-              {game.teams[0].name} vs {game.teams[1].name}
-            </div>
-
-            <div className="export-btns">
-              <button className="export-btn-sm" onClick={()=>exportStatsCSV(game)}>Stats</button>
-              <button className="export-btn-sm green" onClick={()=>exportShotsCSV(game)}>Arrem.</button>
-              <button className="export-btn-sm" style={{color:'var(--blue)'}} onClick={()=>exportLogCSV(game)}>Log</button>
+      <header className="header">
+        <div className="header-top">
+          <button className="back-btn" onClick={()=>{setRunning(false);setScreen('home');}}>‹ Voltar</button>
+          <div className="header-game-label">{game.teams[0].name} vs {game.teams[1].name}</div>
+          <div className="export-btns">
+            <button className="export-btn-sm" onClick={()=>exportStatsCSV(game)}>Stats</button>
+            <button className="export-btn-sm green" onClick={()=>exportShotsCSV(game)}>Arrem.</button>
+            <button className="export-btn-sm" style={{color:'var(--blue)'}} onClick={()=>exportLogCSV(game)}>Log</button>
+          </div>
+        </div>
+        <div className="scoreboard">
+          <div className="team-score" data-active={activeTeam===0}
+            onClick={()=>{setActiveTeam(0);setSelectedPlayerA(null);setSelectedPlayerB(null);}}>
+            <span className="team-name">{game.teams[0].name}</span>
+            <span className="score">{game.teams[0].score}</span>
+            <div className="team-foul-dots">
+              {[1,2,3,4,5].map(n=><span key={n} className="foul-dot"
+                data-filled={((game.teamFouls?.[0]||[])[game.quarter]||0)>=n}
+                data-bonus={n===TEAM_FOUL_BONUS}/>)}
             </div>
           </div>
-
-          {/* SCOREBOARD */}
-          <div className="scoreboard">
-
-            {/* TIME 0 */}
-            <div
-              className="team-score"
-              data-active={activeTeam === 0}
-              onClick={() => {
-                setActiveTeam(0);
-                setSelectedPlayerA(null);
-                setSelectedPlayerB(null);
-              }}
-            >
-              <span className="team-name">{game.teams[0].name}</span>
-              <span className="score">{game.teams[0].score}</span>
-            </div>
-
-            {/* CONTROLES */}
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '6px',
-              background: '#111',
-              padding: '6px 10px',
-              borderRadius: '8px'
-            }}>
-              <button onClick={nextQuarter}>
-                {QUARTERS[game.quarter]}
-              </button>
-
-              <button onClick={undoLastAction}>
-                ↩
-              </button>
-            </div>
-
-            {/* TIME 1 */}
-            <div
-              className="team-score"
-              data-active={activeTeam === 1}
-              onClick={() => {
-                setActiveTeam(1);
-                setSelectedPlayerA(null);
-                setSelectedPlayerB(null);
-              }}
-            >
-              <span className="team-name">{game.teams[1].name}</span>
-              <span className="score">{game.teams[1].score}</span>
-            </div>
-
-          </div>
-
-          {/* CLOCK / INFO */}
           <div className="center-info">
             <span className="quarter-label">{getQuarterLabel(game.quarter)}</span>
-
             <div className="clock">{fmtTime(game.clock)}</div>
-
             <div className="clock-btns">
-              <button
-                className={`clock-play-btn ${running?'playing':'paused'}`}
-                onClick={()=>setRunning(r=>!r)}
-              >
+              <button className={`clock-play-btn ${running?'playing':'paused'}`} onClick={()=>setRunning(r=>!r)}>
                 {running?'⏸':'▶'}
               </button>
-
-              <button
-                className="next-q-btn"
-                data-finished={game.quarter>=3 && game.teams[0].score!==game.teams[1].score}
+              <button className="next-q-btn"
+                data-finished={game.quarter>=3&&game.teams[0].score!==game.teams[1].score}
                 onClick={()=>{
                   if(game.quarter>=3){
-                    const [s0,s1]=[game.teams[0].score,game.teams[1].score];
-                    if(s0!==s1){
-                      setGame(g=>({...g,finished:true}));
-                      return;
-                    }
+                    const[s0,s1]=[game.teams[0].score,game.teams[1].score];
+                    if(s0!==s1){setGame(g=>({...g,finished:true}));return;}
                   }
                   nextQuarter();
-                }}
-              >
-                {game.quarter>=3 && game.teams[0].score!==game.teams[1].score
-                  ? 'Finalizar'
-                  : `›${getQuarterLabel(game.quarter+1)}`
-                }
+                }}>
+                {game.quarter>=3&&game.teams[0].score!==game.teams[1].score?'Finalizar':`›${getQuarterLabel(game.quarter+1)}`}
               </button>
             </div>
           </div>
-
-          {/* BONUS */}
-          {inBonus && (
-            <div className="bonus-bar">
-              BONIFICAÇÃO — {game.teams[activeTeam].name} ({tfq} faltas no {getQuarterLabel(game.quarter)})
+          <div className="team-score right" data-active={activeTeam===1}
+            onClick={()=>{setActiveTeam(1);setSelectedPlayerA(null);setSelectedPlayerB(null);}}>
+            <span className="score">{game.teams[1].score}</span>
+            <span className="team-name">{game.teams[1].name}</span>
+            <div className="team-foul-dots">
+              {[1,2,3,4,5].map(n=><span key={n} className="foul-dot"
+                data-filled={((game.teamFouls?.[1]||[])[game.quarter]||0)>=n}
+                data-bonus={n===TEAM_FOUL_BONUS}/>)}
             </div>
-          )}
-
-          {/* NAV */}
-          <nav className="nav">
-            {[['scout','Scout'],['stats','Stats'],['heatmap','Mapa'],['log','Log']].map(([v,l])=>(
-              <button
-                key={v}
-                className="nav-btn"
-                data-active={view===v}
-                onClick={()=>setView(v)}
-              >
-                {l}
-              </button>
-            ))}
-          </nav>
-        
-        </header>
+          </div>
+        </div>
+        {inBonus&&<div className="bonus-bar">BONIFICAÇÃO — {game.teams[activeTeam].name} ({tfq} faltas no {getQuarterLabel(game.quarter)})</div>}
+        <nav className="nav">
+          {[['scout','Scout'],['stats','Stats'],['heatmap','Mapa'],['log','Log']].map(([v,l])=>(
+            <button key={v} className="nav-btn" data-active={view===v} onClick={()=>setView(v)}>{l}</button>
+          ))}
+        </nav>
+      </header>
 
       {game.finished&&(()=>{
         const[s0,s1]=[game.teams[0].score,game.teams[1].score];
@@ -1366,6 +1297,7 @@ export default function App() {
             <div className="section-label-row">
               <span className="section-label" style={{padding:0}}>Atleta</span>
               <div style={{display:'flex',gap:'6px'}}>
+                <button className="undo-btn" onClick={undoLastAction}>↩ Desfazer</button>
                 <button className="sub-quick-btn" onClick={()=>{
                   if(selectedPlayer===null){showToast('Selecione o atleta que SAI');return;}
                   setSubModal({reason:null,outIdx:selectedPlayer,canCancel:true});
@@ -1373,6 +1305,20 @@ export default function App() {
               </div>
             </div>
           </section>
+          {sp&&(
+            <div className="selected-bar">
+              <span className="sel-badge">#{sp.number} {sp.name}</span>
+              <div className="sel-mini-stats">
+                {[['PTS',sp.pts],['AST',sp.ast],['REB',sp.reb],['RO',sp.oreb],['STL',sp.stl],['TO',sp.to]].map(([k,v])=>(
+                  <span key={k} className="mini-stat" data-warn={k==='TO'&&v>2}><b>{v}</b>{k}</span>
+                ))}
+                <span className="mini-stat" data-warn={sp.fouls>=FOUL_TROUBLE} data-danger={sp.fouls>=FOUL_DISQUALIFY}>
+                  <b>{sp.fouls}</b>FL
+                </span>
+                <span className="mini-stat"><b>{sp.possessions||0}</b>POS</span>
+              </div>
+            </div>
+          )}
           <section className="court-section">
             <div className="court-section-header">
               <div className="section-label" style={{padding:'8px 0 0'}}>
@@ -1386,20 +1332,6 @@ export default function App() {
                 <BasketballCourt shots={activeShots} onCourtClick={handleCourtClick}
                   hasPlayer={selectedPlayer!==null} attackDir={activeTeam===0?'right':'left'}/>
               </div>
-               {sp&&(
-                    <div className="selected-bar">
-                      <span className="sel-badge">#{sp.number} {sp.name}</span>
-                          <div className="sel-mini-stats">
-                            {[['PTS',sp.pts],['AST',sp.ast],['REB',sp.reb],['RO',sp.oreb],['STL',sp.stl],['TO',sp.to]].map(([k,v])=>(
-                              <span key={k} className="mini-stat" data-warn={k==='TO'&&v>2}><b>{v}</b>{k}</span>
-                            ))}
-                            <span className="mini-stat" data-warn={sp.fouls>=FOUL_TROUBLE} data-danger={sp.fouls>=FOUL_DISQUALIFY}>
-                              <b>{sp.fouls}</b>FL
-                            </span>
-                        <span className="mini-stat"><b>{sp.possessions||0}</b>POS</span>
-                      </div>
-                    </div>
-                )}
               {renderTeamPanel(1)}
             </div>
             {activeShots.length>0&&(
