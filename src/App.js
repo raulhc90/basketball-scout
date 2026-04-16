@@ -1107,9 +1107,10 @@ setSelectedPlayerB(null);
 
   // ── Falta ──────────────────────────────────────────────────────────────────
   const commitFoul = useCallback((foulType, isTech) => {
-    const playerIdx = getSelectedPlayer(activeTeam);
+
     if (playerIdx === null) return;
-    const pl = game.teams[activeTeam].players[selectedPlayer];
+    const playerIdx = getSelectedPlayer(activeTeam);
+    const pl = game.teams[activeTeam].players[playerIdx];
     const newFouls     = (pl.fouls     || 0) + 1;
     const newTechFouls = isTech ? (pl.techFouls || 0) + 1 : (pl.techFouls || 0);
     const isDisq       = newFouls >= FOUL_DISQUALIFY;
@@ -1366,7 +1367,8 @@ if (made) {
 const applyMisc = useCallback(action => {
 
   // 1. valida jogador
-  if (selectedPlayer === null) {
+const player = getSelectedPlayer(activeTeam);
+if (player === null) {
     showToast('Selecione um atleta');
     return;
   }
@@ -1426,7 +1428,7 @@ if (action.id === 'stl') {
       };
     });
 
-    const pl = g.teams[activeTeam].players[selectedPlayer];
+    const pl = g.teams[activeTeam].players[getSelectedPlayer(activeTeam)]];
 
     const entry = {
       id: Date.now(),
@@ -1503,7 +1505,7 @@ if (action.id === 'stl') {
 
   // ─── GAME ──────────────────────────────────────────────────────────────────
   const td  = game.teams[activeTeam];
-  const sp  = selectedPlayer !== null ? td.players[selectedPlayer] : null;
+  const sp  = selectedPlayer !== null ? td.players[getSelectedPlayer(activeTeam)]] : null;
   const activeShots = sp ? (sp.shots||[]) : td.players.flatMap(p => p.shots||[]);
   const tfq = (game.teamFouls?.[activeTeam] || [])[game.quarter] || 0;
   const inBonus = tfq >= TEAM_FOUL_BONUS;
