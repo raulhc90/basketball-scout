@@ -1226,22 +1226,22 @@ export default function App() {
             </div>
 
             {/* 🔥 ADICIONA AQUI */}
-            <div style={
+            <div style={{
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              gap: '6px'
+              gap: '6px',
               background: '#111',
               padding: '6px 10px',
               borderRadius: '8px'
-            }>
-                <button onClick={nextQuarter}>
-                    {QUARTERS[game.quarter]}
-                </button>
+            }}>
+              <button onClick={nextQuarter}>
+                {QUARTERS[game.quarter]}
+              </button>
 
-                <button onClick={undoLastAction}>
-                     ↩
-                </button>
+              <button onClick={undoLastAction}>
+                ↩
+              </button>
             </div>
 
             {/* TIME 1 */}
