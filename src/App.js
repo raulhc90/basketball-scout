@@ -1085,7 +1085,6 @@ export default function App() {
     const pIdx = teamIdx===0 ? selectedPlayerA : selectedPlayerB;
     return (
       <div className="team-panel">
-        <div className="team-title">{team.name}</div>
         <div className="players-grid">
           {team.players.map((p,pi)=>(
             <button key={pi} className="player-btn"
