@@ -1226,7 +1226,7 @@ export default function App() {
             </div>
 
             {/* 🔥 ADICIONA AQUI */}
-            <div style={{
+            <div style={
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
@@ -1234,7 +1234,7 @@ export default function App() {
               background: '#111',
               padding: '6px 10px',
               borderRadius: '8px'
-            }}>
+            }>
                 <button onClick={nextQuarter}>
                     {QUARTERS[game.quarter]}
                 </button>
