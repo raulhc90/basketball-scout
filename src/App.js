@@ -759,7 +759,7 @@ export default function App() {
 
 const renderTeamPanel = (teamIdx) => {
   const team = game.teams[teamIdx];
-  const selectedPlayer = getSelectedPlayer(teamIdx);
+  //const selectedPlayer = getSelectedPlayer(teamIdx);
 
   return (
     <div className="team-panel">
@@ -1372,7 +1372,7 @@ const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, s
   if (made) showToast(`+${pts}${assistIdx !== null ? ' + assist' : ''}`);
   setAssistPending(null);
 
-}, [activeTeam, setGameWithUndo]);
+}, [activeTeam, setGameWithUndo,getSelectedPlayer]);
 
   // ── Clique na quadra ───────────────────────────────────────────────────────
   // Sempre ativo quando há atleta selecionado — não precisa clicar em "+ Marcar"
@@ -1475,7 +1475,7 @@ const applyMisc = useCallback(action => {
     };
   });
 
-}, [activeTeam, setGameWithUndo]);
+}, [activeTeam, setGameWithUndo,getSelectedPlayer]);
 
     const applyFT = useCallback(action => {
       const playerIdx = getSelectedPlayer(activeTeam);
@@ -1831,7 +1831,7 @@ setSelectedPlayerB(null); }}>
             )}
           </section>
 
-          {/* Ações — sem botões 2pts/3pts, somente LL + misc */}
+          /* Ações — sem botões 2pts/3pts, somente LL + misc */
          /* <section className="actions-section">
             <div className="actions-group">
               <div className="actions-group-label">Lances Livres</div>
