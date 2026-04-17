@@ -483,7 +483,7 @@ function HeatMap({ shots, teamName, attackDir }) {
           const r=RADIUS*(0.8+(cl.total/maxTotal)*0.6);
           return <circle key={i} cx={cl.cx} cy={cl.cy} r={r} fill={`url(#hg${i})`}/>;
         })}
-        <g stroke="#4a5570" strokeWidth="1" fill="none">
+        <g stroke="#ffffff" strokeWidth="1" fill="none">
           <rect x="2" y="2" width={W-4} height={H-4} rx="2"/>
           <line x1={midX} y1="2" x2={midX} y2={H-2} strokeDasharray="4 3"/>
           <circle cx={W/2} cy={cy} r="38"/>
