@@ -182,7 +182,7 @@ function BasketballCourt({ shots=[], onCourtClick, hasPlayer=false, attackDir='r
       <rect x="2"    y={cy-paintH} width={ftX1}     height={paintH*2} fill="rgba(34,197,94,0.07)"/>
       <rect x={ftX2} y={cy-paintH} width={W-2-ftX2} height={paintH*2} fill="rgba(34,197,94,0.07)"/>
 
-      <g stroke="#4a5570" strokeWidth="1" fill="none">
+      <g stroke="#fffff" strokeWidth="1" fill="none">
         <rect x="2" y="2" width={W-4} height={H-4} rx="2"/>
         <line x1={W/2} y1="2" x2={W/2} y2={H-2}/>
         <circle cx={W/2} cy={cy} r="38"/>
