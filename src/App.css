@@ -187,6 +187,59 @@ html, body, #root { height: 100%; background: var(--bg); }
 .actions-group-label { font-family:var(--fd); font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); padding:6px 14px 5px; }
 .actions-row { display:flex; gap:6px; padding:0 10px; }
 .actions-row.wrap { flex-wrap:wrap; }
+
+/* ── Layout 3 colunas: team-panel-esq | court-container | team-panel-dir ── */
+.game-layout {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  width: 100%;
+  overflow: hidden;
+  flex: 1;
+}
+
+/* Por padrão (retrato/mobile): empilha verticalmente */
+@media (orientation: portrait), (max-width: 700px) {
+  .game-layout { flex-direction: column; }
+  .team-panel { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
+  .team-panel:last-child { border-left: none; border-top: 1px solid var(--border); }
+}
+
+/* Landscape / wide: 3 colunas */
+@media (orientation: landscape) {
+  .team-panel {
+    flex: 0 0 200px;
+    min-width: 0;
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    max-height: calc(100vh - 180px);
+  }
+  .team-panel:last-child {
+    border-right: none;
+    border-left: 1px solid var(--border);
+  }
+  .court-container {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.team-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg2);
+}
+.team-title {
+  font-family: var(--fd);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 6px 10px 4px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+}
 .action-btn { flex:1; min-width:70px; background:var(--bg3); border:1.5px solid var(--bg4); border-radius:var(--r); color:var(--ac,var(--text)); font-family:var(--fd); font-size:16px; font-weight:700; padding:15px 6px; cursor:pointer; transition:all .1s; border-left:3px solid var(--ac,var(--border)); text-align:center; line-height:1; }
 .action-btn:active { background:color-mix(in srgb,var(--ac) 18%,var(--bg3)); transform:scale(.97); }
 
@@ -268,19 +321,16 @@ td[data-warn=true] { color:var(--yellow); font-weight:700; }
   .team-name { font-size: 10px; }
   .team-score { min-width: 70px; padding: 3px 6px; }
 
-  /* Scout em duas colunas */
-  .scout-view { flex-direction: row; flex-wrap: wrap; overflow-y: auto; }
-
+  /* Scout: tabs full width */
+  .scout-view { overflow-y: auto; }
   .team-tabs { width: 100%; }
 
-  /* Coluna esquerda: atletas + mini stats */
-  .players-section {
-    width: 160px;
-    flex-shrink: 0;
-    border-bottom: none;
-    border-right: 1px solid var(--border);
+  /* game-layout: 3 colunas em landscape pequeno */
+  .game-layout { flex-direction: row !important; }
+  .team-panel {
+    flex: 0 0 160px !important;
     overflow-y: auto;
-    max-height: calc(100vh - 120px);
+    max-height: calc(100vh - 160px);
   }
   .players-grid { grid-template-columns: repeat(2, 1fr); gap: 4px; padding: 0 6px 8px; }
   .player-btn { padding: 6px 2px; }
@@ -288,25 +338,10 @@ td[data-warn=true] { color:var(--yellow); font-weight:700; }
   .pname { font-size: 10px; }
   .ppts { font-size: 10px; }
 
-  /* Coluna central: mapa */
-  .court-section {
-    flex: 1;
-    min-width: 0;
-    border-bottom: none;
-    border-right: 1px solid var(--border);
-  }
   .court-section-header { padding: 4px 8px; }
   .court-container { padding: 4px 8px; }
   .shot-summary { padding: 4px 8px; flex-wrap: wrap; gap: 6px; }
 
-  /* Coluna direita: ações */
-  .actions-section {
-    width: 200px;
-    flex-shrink: 0;
-    overflow-y: auto;
-    max-height: calc(100vh - 120px);
-    padding: 4px 0 8px;
-  }
   .actions-group-label { padding: 4px 10px 3px; font-size: 10px; }
   .actions-row { gap: 4px; padding: 0 6px; }
   .action-btn { font-size: 13px; padding: 10px 4px; min-width: 0; }
@@ -353,22 +388,12 @@ td[data-warn=true] { color:var(--yellow); font-weight:700; }
   .score { font-size: 36px; }
 
   /* Scout em 3 colunas com mais espaço */
-  .scout-view { flex-direction: row; flex-wrap: wrap; }
+  .scout-view { flex-wrap: wrap; }
   .team-tabs { width: 100%; }
 
-  .players-section {
-    width: 200px;
-    flex-shrink: 0;
-    border-bottom: none;
-    border-right: 1px solid var(--border);
-  }
+  .game-layout { flex-direction: row !important; }
+  .team-panel { flex: 0 0 200px !important; }
   .players-grid { grid-template-columns: repeat(3, 1fr); }
-
-  .court-section {
-    flex: 1;
-    border-bottom: none;
-    border-right: 1px solid var(--border);
-  }
 
   .actions-section {
     width: 220px;
