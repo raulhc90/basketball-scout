@@ -32,12 +32,14 @@ const DEFAULT_TEAM_A = [
   {number:'11',name:'D. Rocha'},{number:'23',name:'E. Mendes'},{number:'06',name:'F. Santos'},
   {number:'08',name:'G. Alves'},{number:'09',name:'H. Nunes'},{number:'12',name:'I. Pires'},
   {number:'14',name:'J. Ferreira'},{number:'15',name:'K. Braga'},{number:'21',name:'L. Moura'},
+  {number:'00',name:'M. Jogador'},{number:'02',name:'N. Jogador'},{number:'03',name:'O. Jogador'},
 ];
 const DEFAULT_TEAM_B = [
   {number:'05',name:'M. Ribeiro'},{number:'08',name:'N. Cardoso'},{number:'13',name:'O. Dias'},
   {number:'17',name:'P. Carvalho'},{number:'22',name:'Q. Monteiro'},{number:'03',name:'R. Teixeira'},
   {number:'06',name:'S. Figueira'},{number:'09',name:'T. Brito'},{number:'16',name:'U. Correia'},
   {number:'18',name:'V. Barbosa'},{number:'20',name:'W. Cunha'},{number:'25',name:'X. Lopes'},
+  {number:'01',name:'Y. Jogador'},{number:'07',name:'Z. Jogador'},{number:'11',name:'AA. Jogador'},
 ];
 
 const mkTeam = (name, roster) => ({
@@ -237,6 +239,63 @@ function BasketballCourt({ shots=[], onCourtClick, hasPlayer=false, attackDir='r
             </g>;
       })}
     </svg>
+  );
+}
+
+// ─── MissedShotReboundModal ──────────────────────────────────────────────────
+// Aparece após arremesso errado: pergunta se algum jogador pegou o rebote ofensivo.
+// Se sim: mantém posse (não chama endPossession adversário).
+// Se não: posse vai para o adversário.
+function MissedShotReboundModal({ attackingPlayers, onRebound, onNoRebound, onCancel }) {
+  const [step, setStep] = useState('ask');  // 'ask' | 'pick'
+
+  if (step === 'ask') {
+    return (
+      <div className="confirm-overlay">
+        <div className="confirm-modal">
+          <div className="confirm-title">Arremesso errado</div>
+          <div className="confirm-btns">
+            <button className="confirm-btn made" style={{background:'rgba(6,182,212,.15)',borderColor:'#06b6d4',color:'#06b6d4'}}
+              onClick={() => setStep('pick')}>
+              Rebote Ofensivo
+            </button>
+            <button className="confirm-btn missed"
+              onClick={onNoRebound}>
+              Adversário pegou
+            </button>
+          </div>
+          <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
+        </div>
+      </div>
+    );
+  }
+
+  // step === 'pick': selecionar quem pegou o rebote ofensivo
+  const eligible = attackingPlayers.filter(p => p.active && p.fouls < FOUL_DISQUALIFY);
+  return (
+    <div className="assist-overlay">
+      <div className="assist-modal">
+        <div className="assist-modal-header">
+          <span>Quem pegou o rebote ofensivo?</span>
+          <button className="modal-close" onClick={onCancel}>✕</button>
+        </div>
+        <div className="assist-modal-body">
+          <button className="assist-none-btn" onClick={() => onRebound(null)}>Não identificado</button>
+          <div className="assist-players-grid">
+            {eligible.map((p, i) => {
+              const realIdx = attackingPlayers.indexOf(p);
+              return (
+                <button key={i} className="assist-player-btn" onClick={() => onRebound(realIdx)}>
+                  <span className="assist-pnum">#{p.number}</span>
+                  <span className="assist-pname">{p.name.split(' ')[0]}</span>
+                  <span className="assist-past">{p.oreb}ro</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -506,7 +565,7 @@ function SubModal({ title, reason, players, outPlayerIdx, onSub, onCancel, canCa
 
 // ─── HeatMap ──────────────────────────────────────────────────────────────────
 function HeatMap({ shots, teamName, attackDir }) {
-  const W = 600, H = 320, cy = 160, midX = 300;
+  const W = 600, H = 320, cy = 160;
   const RADIUS = 38;
   const clusters = [];
   shots.forEach(s => {
@@ -546,36 +605,76 @@ function HeatMap({ shots, teamName, attackDir }) {
             );
           })}
         </defs>
+        {/* Fundo */}
         <rect x="0" y="0" width={W} height={H} fill="#1a1f2a"/>
+
+        {/* Blobs de calor (abaixo das linhas) */}
         {clusters.map((cl,i)=>{
           const r=RADIUS*(0.8+(cl.total/maxTotal)*0.6);
           return <circle key={i} cx={cl.cx} cy={cl.cy} r={r} fill={`url(#hg${i})`}/>;
         })}
-        <g stroke="#4a5570" strokeWidth="1" fill="none">
-          <rect x="2" y="2" width={W-4} height={H-4} rx="2"/>
-          <line x1={midX} y1="2" x2={midX} y2={H-2} strokeDasharray="4 3"/>
-          <circle cx={W/2} cy={cy} r="38"/>
-          <rect x="2" y={cy-52} width="124" height="104"/>
-          <rect x="476" y={cy-52} width="122" height="104"/>
-          <line x1="2"   y1="19" x2="67"  y2="19"/><path d="M 67 19 A 145 145 0 0 1 67 301"/><line x1="67"  y1="301" x2="2"   y2="301"/>
-          <line x1="533" y1="19" x2="598" y2="19"/><path d="M 533 19 A 145 145 0 0 0 533 301"/><line x1="533" y1="301" x2="598" y2="301"/>
-        </g>
-        <line x1={midX} y1="2" x2={midX} y2={H-2} stroke="#5a6a95" strokeWidth="1.5"/>
-        <g stroke="#f97316" strokeWidth="1.8" fill="none">
-          <circle cx="34" cy={cy} r="5.5"/><line x1="2" y1={cy} x2="29" y2={cy}/>
-          <circle cx="566" cy={cy} r="5.5"/><line x1="571" y1={cy} x2="598" y2={cy}/>
-        </g>
-        {attackDir==='right'?(
-          <g opacity="0.7">
-            <line x1="215" y1={cy} x2="345" y2={cy} stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeDasharray="5 4"/>
-            <polygon points={`345,${cy-9} 362,${cy} 345,${cy+9}`} fill="#f97316"/>
-          </g>
-        ):(
-          <g opacity="0.7">
-            <line x1="385" y1={cy} x2="255" y2={cy} stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeDasharray="5 4"/>
-            <polygon points={`255,${cy-9} 238,${cy} 255,${cy+9}`} fill="#f97316"/>
-          </g>
-        )}
+
+        {/* Zonas 3pts — mesmo que BasketballCourt */}
+        {(()=>{
+          const arcX1=67,arcX2=533,arcR=145,latY1=19,latY2=301,paintH=52;
+          const cornerTL=`M 2 2 L ${arcX1} 2 L ${arcX1} ${latY1} L 2 ${latY1} Z`;
+          const cornerBL=`M 2 ${latY2} L ${arcX1} ${latY2} L ${arcX1} ${H-2} L 2 ${H-2} Z`;
+          const corridorL=`M 2 ${latY1} L ${arcX1} ${latY1} L ${arcX1} ${latY2} L 2 ${latY2} Z`;
+          const beyondL=`M ${arcX1} ${latY1} A ${arcR} ${arcR} 0 0 1 ${arcX1} ${latY2} L ${W/2} ${latY2} L ${W/2} ${latY1} Z`;
+          const cornerTR=`M ${W-2} 2 L ${arcX2} 2 L ${arcX2} ${latY1} L ${W-2} ${latY1} Z`;
+          const cornerBR=`M ${W-2} ${latY2} L ${arcX2} ${latY2} L ${arcX2} ${H-2} L ${W-2} ${H-2} Z`;
+          const corridorR=`M ${arcX2} ${latY1} L ${W-2} ${latY1} L ${W-2} ${latY2} L ${arcX2} ${latY2} Z`;
+          const beyondR=`M ${arcX2} ${latY1} A ${arcR} ${arcR} 0 0 0 ${arcX2} ${latY2} L ${W/2} ${latY2} L ${W/2} ${latY1} Z`;
+          const cx1=34,cx2=566,ftX1=124,ftX2=476;
+          return (<>
+            <path d={cornerTL+' '+cornerBL+' '+corridorL+' '+beyondL} fill="rgba(59,130,246,0.07)"/>
+            <path d={cornerTR+' '+cornerBR+' '+corridorR+' '+beyondR} fill="rgba(59,130,246,0.07)"/>
+            <rect x="2" y={cy-paintH} width={ftX1} height={paintH*2} fill="rgba(34,197,94,0.07)"/>
+            <rect x={ftX2} y={cy-paintH} width={W-2-ftX2} height={paintH*2} fill="rgba(34,197,94,0.07)"/>
+            {/* Linhas estruturais */}
+            <g stroke="#4a5570" strokeWidth="1" fill="none">
+              <rect x="2" y="2" width={W-4} height={H-4} rx="2"/>
+              <line x1={W/2} y1="2" x2={W/2} y2={H-2}/>
+              <circle cx={W/2} cy={cy} r="38"/>
+              <rect x="2" y={cy-paintH} width={ftX1} height={paintH*2}/>
+              <path d={`M ${ftX1} ${cy-paintH} A 39 39 0 0 1 ${ftX1} ${cy+paintH}`} strokeDasharray="5 3"/>
+              <rect x={ftX2} y={cy-paintH} width={W-2-ftX2} height={paintH*2}/>
+              <path d={`M ${ftX2} ${cy-paintH} A 39 39 0 0 0 ${ftX2} ${cy+paintH}`} strokeDasharray="5 3"/>
+              <path d={`M ${cx1} ${cy-23} A 23 23 0 0 1 ${cx1} ${cy+23}`}/>
+              <path d={`M ${cx2} ${cy-23} A 23 23 0 0 0 ${cx2} ${cy+23}`}/>
+            </g>
+            {/* Linha 3pts */}
+            <g stroke="#5a6a95" strokeWidth="1.6" fill="none" strokeLinecap="round">
+              <line x1="2" y1={latY1} x2={arcX1} y2={latY1}/>
+              <path d={`M ${arcX1} ${latY1} A ${arcR} ${arcR} 0 0 1 ${arcX1} ${latY2}`}/>
+              <line x1={arcX1} y1={latY2} x2="2" y2={latY2}/>
+              <line x1={W-2} y1={latY1} x2={arcX2} y2={latY1}/>
+              <path d={`M ${arcX2} ${latY1} A ${arcR} ${arcR} 0 0 0 ${arcX2} ${latY2}`}/>
+              <line x1={arcX2} y1={latY2} x2={W-2} y2={latY2}/>
+            </g>
+            {/* Cestas */}
+            <g stroke="#f97316" strokeWidth="1.8" fill="none">
+              <circle cx={cx1} cy={cy} r="5.5"/><line x1="2" y1={cy} x2={cx1-5} y2={cy}/>
+              <circle cx={cx2} cy={cy} r="5.5"/><line x1={W-2} y1={cy} x2={cx2+5} y2={cy}/>
+            </g>
+            {/* Seta de ataque */}
+            {attackDir==='right'?(
+              <g opacity="0.85">
+                <line x1="215" y1={cy} x2="348" y2={cy} stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 4"/>
+                <polygon points={`348,${cy-11} 370,${cy} 348,${cy+11}`} fill="#f97316" opacity="0.9"/>
+                <text x="290" y={cy-16} fill="#f97316" fontSize="9" fontFamily="sans-serif" fontWeight="bold" textAnchor="middle" letterSpacing="2">ATAQUE</text>
+              </g>
+            ):(
+              <g opacity="0.85">
+                <line x1="385" y1={cy} x2="252" y2={cy} stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 4"/>
+                <polygon points={`252,${cy-11} 230,${cy} 252,${cy+11}`} fill="#f97316" opacity="0.9"/>
+                <text x="310" y={cy-16} fill="#f97316" fontSize="9" fontFamily="sans-serif" fontWeight="bold" textAnchor="middle" letterSpacing="2">ATAQUE</text>
+              </g>
+            )}
+          </>);
+        })()}
+
+        {/* Dots dos arremessos */}
         {shots.map((s,i)=>{
           const px=s.x*W/100,py=s.y*H/100;
           return s.made
@@ -668,6 +767,8 @@ export default function App() {
   const [subModal, setSubModal]         = useState(null);
   const [dragPlayer, setDragPlayer]     = useState(null);
   const [turnoverPending, setTurnoverPending] = useState(false);
+  // reboundPending: { playerIdx, three, shotType } quando arremesso errado aguarda rebote
+  const [reboundPending, setReboundPending] = useState(null);
   const undoStack = useRef([]);
 
   // Helper: índice do atleta selecionado no time ativo
@@ -760,10 +861,23 @@ export default function App() {
 
   const undoLastAction = useCallback(() => {
     if (undoStack.current.length === 0) { showToast('Nada para desfazer'); return; }
-    setGame(undoStack.current[0]);
+    const prev = undoStack.current[0];
+    // Descobrir qual foi a última ação comparando o log
+    const currentLog = game?.log || [];
+    const prevLog    = prev?.log    || [];
+    let msg = 'Ação desfeita';
+    if (currentLog.length > prevLog.length) {
+      const lastEntry = currentLog[0]; // log é prepend, então [0] é o mais recente
+      if (lastEntry) {
+        const player = lastEntry.player || '';
+        const action = lastEntry.action || '';
+        msg = `Desfeito: ${action} ${player}`.trim();
+      }
+    }
+    setGame(prev);
     undoStack.current = undoStack.current.slice(1);
-    showToast('Ação desfeita');
-  }, []);
+    showToast(msg);
+  }, [game]);
 
   // commitTurnover: chamado pelo TurnoverModal
   // toType: 'roubo' | 'infracao' | 'outros'
@@ -998,7 +1112,8 @@ export default function App() {
   }, [game, setGameWithUndo, endPossession]);
 
   // ── commitShot ──────────────────────────────────────────────────────────────
-  const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, shotType='Arremesso') => {
+  // keepPossession=true: arremesso errado mas com rebote ofensivo → não dá posse ao adversário
+  const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, shotType='Arremesso', keepPossession=false) => {
     const pts = made ? (three?3:2) : 0;
     const actionId = made ? (three?'fg3m':'fg2m') : (three?'fg3miss':'fg2miss');
     const col = made ? (three?'#3b82f6':'#22c55e') : '#475569';
@@ -1044,8 +1159,9 @@ export default function App() {
         team:g.teams[activeTeam].name, player:`#${sp.number} ${sp.name.split(' ')[0]}`,
         action:made?(three?'3pts':'2pts'):(three?'3x falha':'2x falha'), pts, color:col });
 
-      // Qualquer arremesso (certo ou errado) conta como posse do time que atacou
-      return endPossession({ ...g, teams, log:[...entries,...g.log] }, activeTeam, playerIdx);
+      // Arremesso conta posse do time atacante, exceto quando há rebote ofensivo (keepPossession)
+      const gBase = { ...g, teams, log:[...entries,...g.log] };
+      return keepPossession ? gBase : endPossession(gBase, activeTeam, playerIdx);
     });
 
     if (made) showToast(`+${pts}${assistIdx!==null?' + assist':''}`);
@@ -1274,7 +1390,7 @@ export default function App() {
         <ConfirmShotModal
           three={confirmShot.three} inPaint={confirmShot.inPaint}
           onMade={(shotType)=>{ const s=confirmShot; setConfirmShot(null); setAssistPending({scorerIdx:selectedPlayer,xPct:s.xPct,yPct:s.yPct,made:true,three:s.three,shotType}); }}
-          onMissed={(shotType)=>{ const s=confirmShot; setConfirmShot(null); commitShot(selectedPlayer,s.xPct,s.yPct,false,s.three,null,shotType); }}
+          onMissed={(shotType)=>{ const s=confirmShot; setConfirmShot(null); setReboundPending({ playerIdx:selectedPlayer, xPct:s.xPct, yPct:s.yPct, three:s.three, shotType }); }}
           onCancel={()=>setConfirmShot(null)}
         />
       )}
@@ -1293,6 +1409,40 @@ export default function App() {
           activeTeamPlayers={game.teams[1-activeTeam].players}
           onType={(toType, stealerIdx) => commitTurnover(toType, stealerIdx)}
           onCancel={() => setTurnoverPending(false)}
+        />
+      )}
+      {reboundPending && (
+        <MissedShotReboundModal
+          attackingPlayers={game.teams[activeTeam].players}
+          onRebound={(rebPlayerIdx) => {
+            // Rebote ofensivo: registra arremesso errado + rebote, mantém posse
+            const r = reboundPending;
+            commitShot(r.playerIdx, r.xPct, r.yPct, false, r.three, null, r.shotType, true /* keepPossession */);
+            if (rebPlayerIdx !== null) {
+              // Credita rebote ofensivo ao jogador
+              setGameWithUndo(g => {
+                const teams = g.teams.map((t, ti) => {
+                  if (ti !== activeTeam) return t;
+                  return { ...t, players: t.players.map((p, pi) =>
+                    pi === rebPlayerIdx ? { ...p, oreb: (p.oreb||0)+1 } : p
+                  )};
+                });
+                const pl = g.teams[activeTeam].players[rebPlayerIdx];
+                const entry = { id: Date.now(), q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
+                  team: g.teams[activeTeam].name, player: `#${pl.number} ${pl.name.split(' ')[0]}`,
+                  action: 'Reb. Ofensivo', pts: 0, color: '#0891b2' };
+                return { ...g, teams, log: [entry, ...g.log] };
+              });
+            }
+            setReboundPending(null);
+          }}
+          onNoRebound={() => {
+            // Sem rebote ofensivo: registra arremesso errado, posse vai pro adversário
+            const r = reboundPending;
+            commitShot(r.playerIdx, r.xPct, r.yPct, false, r.three, null, r.shotType, false /* keepPossession */);
+            setReboundPending(null);
+          }}
+          onCancel={() => setReboundPending(null)}
         />
       )}
       {ftModal==='pick_player' && (()=>{
