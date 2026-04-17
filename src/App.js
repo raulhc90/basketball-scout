@@ -182,7 +182,7 @@ function BasketballCourt({ shots=[], onCourtClick, hasPlayer=false, attackDir='r
       <rect x="2"    y={cy-paintH} width={ftX1}     height={paintH*2} fill="rgba(34,197,94,0.07)"/>
       <rect x={ftX2} y={cy-paintH} width={W-2-ftX2} height={paintH*2} fill="rgba(34,197,94,0.07)"/>
 
-      <g stroke="#ffffff" strokeWidth="1" fill="none">
+      <g stroke="#4a5570" strokeWidth="1" fill="none">
         <rect x="2" y="2" width={W-4} height={H-4} rx="2"/>
         <line x1={W/2} y1="2" x2={W/2} y2={H-2}/>
         <circle cx={W/2} cy={cy} r="38"/>
@@ -397,6 +397,74 @@ function FoulModal({ player, teamFoulsInQuarter, onType, onCancel }) {
   );
 }
 
+
+// ─── TurnoverModal ────────────────────────────────────────────────────────────
+function TurnoverModal({ activeTeamPlayers, onType, onCancel }) {
+  const [step, setStep] = useState('type');  // 'type' | 'stealer'
+  const [, setToType] = useState(null);
+
+  if (step === 'type') {
+    return (
+      <div className="assist-overlay">
+        <div className="assist-modal">
+          <div className="assist-modal-header">
+            <span>Tipo de Turnover</span>
+            <button className="modal-close" onClick={onCancel}>✕</button>
+          </div>
+          <div className="assist-modal-body">
+            <div className="foul-types-grid">
+              <button className="foul-type-btn" style={{'--fc':'#10b981'}}
+                onClick={() => { setToType('roubo'); setStep('stealer'); }}>
+                <span className="foul-type-label">Roubo de Bola</span>
+                <span className="foul-type-desc">Selecionar quem roubou</span>
+              </button>
+              <button className="foul-type-btn" style={{'--fc':'#ef4444'}}
+                onClick={() => onType('infracao', null)}>
+                <span className="foul-type-label">Infração</span>
+                <span className="foul-type-desc">Passos, duplo drible...</span>
+              </button>
+              <button className="foul-type-btn" style={{'--fc':'#64748b'}}
+                onClick={() => onType('outros', null)}>
+                <span className="foul-type-label">Outros</span>
+                <span className="foul-type-desc">Má passagem, saiu pela linha...</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // step === 'stealer': selecionar jogador adversário que roubou
+  const eligible = activeTeamPlayers.filter(p => p.active && p.fouls < FOUL_DISQUALIFY);
+  return (
+    <div className="assist-overlay">
+      <div className="assist-modal">
+        <div className="assist-modal-header">
+          <span>Quem roubou a bola?</span>
+          <button className="modal-close" onClick={onCancel}>✕</button>
+        </div>
+        <div className="assist-modal-body">
+          <button className="assist-none-btn" onClick={() => onType('roubo', null)}>Não identificado</button>
+          <div className="assist-players-grid">
+            {eligible.map((p, i) => {
+              const realIdx = activeTeamPlayers.indexOf(p);
+              return (
+                <button key={i} className="assist-player-btn"
+                  onClick={() => onType('roubo', realIdx)}>
+                  <span className="assist-pnum">#{p.number}</span>
+                  <span className="assist-pname">{p.name.split(' ')[0]}</span>
+                  <span className="assist-past">{p.stl}stl</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── SubModal ─────────────────────────────────────────────────────────────────
 function SubModal({ title, reason, players, outPlayerIdx, onSub, onCancel, canCancel=true }) {
   return (
@@ -483,7 +551,7 @@ function HeatMap({ shots, teamName, attackDir }) {
           const r=RADIUS*(0.8+(cl.total/maxTotal)*0.6);
           return <circle key={i} cx={cl.cx} cy={cl.cy} r={r} fill={`url(#hg${i})`}/>;
         })}
-        <g stroke="#ffffff" strokeWidth="1" fill="none">
+        <g stroke="#4a5570" strokeWidth="1" fill="none">
           <rect x="2" y="2" width={W-4} height={H-4} rx="2"/>
           <line x1={midX} y1="2" x2={midX} y2={H-2} strokeDasharray="4 3"/>
           <circle cx={W/2} cy={cy} r="38"/>
@@ -599,6 +667,7 @@ export default function App() {
   const [ftPlayer, setFtPlayer]         = useState(null);
   const [subModal, setSubModal]         = useState(null);
   const [dragPlayer, setDragPlayer]     = useState(null);
+  const [turnoverPending, setTurnoverPending] = useState(false);
   const undoStack = useRef([]);
 
   // Helper: índice do atleta selecionado no time ativo
@@ -695,6 +764,65 @@ export default function App() {
     undoStack.current = undoStack.current.slice(1);
     showToast('Ação desfeita');
   }, []);
+
+  // commitTurnover: chamado pelo TurnoverModal
+  // toType: 'roubo' | 'infracao' | 'outros'
+  // stealerIdx: índice do jogador adversário que roubou (ou null)
+  const commitTurnover = useCallback((toType, stealerIdx) => {
+    const pIdx = activeTeam === 0 ? selectedPlayerA : selectedPlayerB;
+    if (pIdx === null) return;
+    const teamIdx = activeTeam;
+    const oppIdx  = 1 - teamIdx;
+
+    setGameWithUndo(g => {
+      // Incrementa TO do atleta que perdeu a bola
+      const teams = g.teams.map((t, ti) => {
+        if (ti === teamIdx) return {
+          ...t, players: t.players.map((p, pi) =>
+            pi === pIdx ? { ...p, to: (p.to||0)+1 } : p
+          )
+        };
+        // Se for roubo, incrementa STL do ladrão
+        if (ti === oppIdx && stealerIdx !== null) return {
+          ...t, players: t.players.map((p, pi) =>
+            pi === stealerIdx ? { ...p, stl: (p.stl||0)+1 } : p
+          )
+        };
+        return t;
+      });
+
+      const pl = g.teams[teamIdx].players[pIdx];
+      const stealerLabel = stealerIdx !== null
+        ? ` (roubo: #${g.teams[oppIdx].players[stealerIdx].number})`
+        : toType === 'roubo' ? ' (roubo)' : toType === 'infracao' ? ' (infração)' : ' (outros)';
+
+      const entry = { id:Date.now(), q:getQuarterLabel(g.quarter), time:fmtTime(g.clock),
+        team:g.teams[teamIdx].name, player:`#${pl.number} ${pl.name.split(' ')[0]}`,
+        action:`Turnover${stealerLabel}`, pts:0, color:'#ef4444' };
+
+      // Se for roubo com jogador identificado, também loga STL
+      const entries = [entry];
+      if (toType === 'roubo' && stealerIdx !== null) {
+        const stealer = g.teams[oppIdx].players[stealerIdx];
+        entries.push({ id:Date.now()+1, q:getQuarterLabel(g.quarter), time:fmtTime(g.clock),
+          team:g.teams[oppIdx].name, player:`#${stealer.number} ${stealer.name.split(' ')[0]}`,
+          action:'Roubo', pts:0, color:'#10b981' });
+      }
+
+      // Posse vai para o adversário; se roubo identificado, conta para o ladrão
+      return endPossession(
+        { ...g, teams, log:[...entries,...g.log] },
+        oppIdx,
+        toType === 'roubo' ? stealerIdx : null
+      );
+    });
+
+    setTurnoverPending(false);
+    // Troca time ativo automaticamente
+    setActiveTeam(oppIdx => 1 - oppIdx);
+    setSelectedPlayerA(null);
+    setSelectedPlayerB(null);
+  }, [activeTeam, selectedPlayerA, selectedPlayerB, setGameWithUndo, endPossession]);
 
   // ── startGame ───────────────────────────────────────────────────────────────
   const startGame = (nameA, nameB, rosterA, rosterB, startingTeam) => {
@@ -947,22 +1075,8 @@ export default function App() {
     if (action.id === 'fouls') { setFoulPending(true); return; }
 
     if (action.id === 'to') {
-      // Turnover: posse vai para o adversário + muda time ativo
-      setGameWithUndo(g => {
-        const teams = g.teams.map((t,ti) => {
-          if (ti !== teamIdx) return t;
-          return { ...t, players: t.players.map((p,pi) => pi!==pIdx?p:{ ...p, to:(p.to||0)+1 }) };
-        });
-        const pl = g.teams[teamIdx].players[pIdx];
-        const entry = { id:Date.now(), q:getQuarterLabel(g.quarter), time:fmtTime(g.clock),
-          team:g.teams[teamIdx].name, player:`#${pl.number} ${pl.name.split(' ')[0]}`,
-          action:'Turnover', pts:0, color:'#ef4444' };
-        return endPossession({ ...g, teams, log:[entry,...g.log] }, 1-teamIdx, null);
-      });
-      // Troca o time ativo automaticamente
-      setActiveTeam(1-teamIdx);
-      setSelectedPlayerA(null);
-      setSelectedPlayerB(null);
+      // Abre modal para tipo de turnover
+      setTurnoverPending(true);
       return;
     }
 
@@ -1044,7 +1158,7 @@ export default function App() {
             </svg>
           </div>
           <div className="home-title">WinFast Basketball Scout</div>
-          <div className="home-sub">Análise ao vivo · Open Source · PWA </div>
+          <div className="home-sub">Análise ao vivo · Open Source · PWA</div>
         </div>
         <button className="btn-new-game" onClick={()=>setShowNewGame(true)}>+ Novo Jogo</button>
         {games.length > 0 && (
@@ -1174,6 +1288,13 @@ export default function App() {
       {foulPending && sp && (
         <FoulModal player={sp} teamFoulsInQuarter={tfq} onType={commitFoul} onCancel={()=>setFoulPending(false)}/>
       )}
+      {turnoverPending && (
+        <TurnoverModal
+          activeTeamPlayers={game.teams[1-activeTeam].players}
+          onType={(toType, stealerIdx) => commitTurnover(toType, stealerIdx)}
+          onCancel={() => setTurnoverPending(false)}
+        />
+      )}
       {ftModal==='pick_player' && (()=>{
         const ftTeamIdx = 1-activeTeam;
         return <FreeThrowModal players={game.teams[ftTeamIdx].players}
@@ -1219,23 +1340,33 @@ export default function App() {
           </div>
         </div>
         <div className="scoreboard">
-          <div className="team-score" data-active={activeTeam===0}
-            onClick={()=>{setActiveTeam(0);setSelectedPlayerA(null);setSelectedPlayerB(null);}}>
-            <span className="team-name">{game.teams[0].name}</span>
-            <span className="score">{game.teams[0].score}</span>
-            <div className="team-foul-dots">
-              {[1,2,3,4,5].map(n=><span key={n} className="foul-dot"
-                data-filled={((game.teamFouls?.[0]||[])[game.quarter]||0)>=n}
-                data-bonus={n===TEAM_FOUL_BONUS}/>)}
+          {/* Time A + botão Sub */}
+          <div className="team-score-wrap">
+            <div className="team-score" data-active={activeTeam===0}
+              onClick={()=>{setActiveTeam(0);setSelectedPlayerA(null);setSelectedPlayerB(null);}}>
+              <span className="team-name">{game.teams[0].name}</span>
+              <span className="score">{game.teams[0].score}</span>
+              <div className="team-foul-dots">
+                {[1,2,3,4,5].map(n=><span key={n} className="foul-dot"
+                  data-filled={((game.teamFouls?.[0]||[])[game.quarter]||0)>=n}
+                  data-bonus={n===TEAM_FOUL_BONUS}/>)}
+              </div>
             </div>
+            <button className="sub-score-btn" onClick={()=>{
+              setActiveTeam(0);
+              if(selectedPlayerA===null){showToast('Selecione atleta do Time A');return;}
+              setSubModal({reason:null,outIdx:selectedPlayerA,canCancel:true});
+            }} title="Substituição Time A">↕</button>
           </div>
+
+          {/* Centro: play | tempo | next-q | desfazer */}
           <div className="center-info">
             <span className="quarter-label">{getQuarterLabel(game.quarter)}</span>
-            <div className="clock">{fmtTime(game.clock)}</div>
-            <div className="clock-btns">
+            <div className="clock-row">
               <button className={`clock-play-btn ${running?'playing':'paused'}`} onClick={()=>setRunning(r=>!r)}>
                 {running?'⏸':'▶'}
               </button>
+              <div className="clock">{fmtTime(game.clock)}</div>
               <button className="next-q-btn"
                 data-finished={game.quarter>=3&&game.teams[0].score!==game.teams[1].score}
                 onClick={()=>{
@@ -1245,18 +1376,28 @@ export default function App() {
                   }
                   nextQuarter();
                 }}>
-                {game.quarter>=3&&game.teams[0].score!==game.teams[1].score?'Finalizar':`›${getQuarterLabel(game.quarter+1)}`}
+                {game.quarter>=3&&game.teams[0].score!==game.teams[1].score?'Fim':`›${getQuarterLabel(game.quarter+1)}`}
               </button>
+              <button className="undo-btn-clock" onClick={undoLastAction} title="Desfazer">↩</button>
             </div>
           </div>
-          <div className="team-score right" data-active={activeTeam===1}
-            onClick={()=>{setActiveTeam(1);setSelectedPlayerA(null);setSelectedPlayerB(null);}}>
-            <span className="score">{game.teams[1].score}</span>
-            <span className="team-name">{game.teams[1].name}</span>
-            <div className="team-foul-dots">
-              {[1,2,3,4,5].map(n=><span key={n} className="foul-dot"
-                data-filled={((game.teamFouls?.[1]||[])[game.quarter]||0)>=n}
-                data-bonus={n===TEAM_FOUL_BONUS}/>)}
+
+          {/* Time B + botão Sub */}
+          <div className="team-score-wrap">
+            <button className="sub-score-btn" onClick={()=>{
+              setActiveTeam(1);
+              if(selectedPlayerB===null){showToast('Selecione atleta do Time B');return;}
+              setSubModal({reason:null,outIdx:selectedPlayerB,canCancel:true});
+            }} title="Substituição Time B">↕</button>
+            <div className="team-score right" data-active={activeTeam===1}
+              onClick={()=>{setActiveTeam(1);setSelectedPlayerA(null);setSelectedPlayerB(null);}}>
+              <span className="score">{game.teams[1].score}</span>
+              <span className="team-name">{game.teams[1].name}</span>
+              <div className="team-foul-dots">
+                {[1,2,3,4,5].map(n=><span key={n} className="foul-dot"
+                  data-filled={((game.teamFouls?.[1]||[])[game.quarter]||0)>=n}
+                  data-bonus={n===TEAM_FOUL_BONUS}/>)}
+              </div>
             </div>
           </div>
         </div>
@@ -1293,32 +1434,7 @@ export default function App() {
               </button>
             ))}
           </div>
-          <section className="players-section">
-            <div className="section-label-row">
-              <span className="section-label" style={{padding:0}}>Atleta</span>
-              <div style={{display:'flex',gap:'6px'}}>
-                <button className="undo-btn" onClick={undoLastAction}>↩ Desfazer</button>
-                <button className="sub-quick-btn" onClick={()=>{
-                  if(selectedPlayer===null){showToast('Selecione o atleta que SAI');return;}
-                  setSubModal({reason:null,outIdx:selectedPlayer,canCancel:true});
-                }}>↕ Sub</button>
-              </div>
-            </div>
-          </section>
-          {sp&&(
-            <div className="selected-bar">
-              <span className="sel-badge">#{sp.number} {sp.name}</span>
-              <div className="sel-mini-stats">
-                {[['PTS',sp.pts],['AST',sp.ast],['REB',sp.reb],['RO',sp.oreb],['STL',sp.stl],['TO',sp.to]].map(([k,v])=>(
-                  <span key={k} className="mini-stat" data-warn={k==='TO'&&v>2}><b>{v}</b>{k}</span>
-                ))}
-                <span className="mini-stat" data-warn={sp.fouls>=FOUL_TROUBLE} data-danger={sp.fouls>=FOUL_DISQUALIFY}>
-                  <b>{sp.fouls}</b>FL
-                </span>
-                <span className="mini-stat"><b>{sp.possessions||0}</b>POS</span>
-              </div>
-            </div>
-          )}
+
           <section className="court-section">
             <div className="court-section-header">
               <div className="section-label" style={{padding:'8px 0 0'}}>
@@ -1334,6 +1450,25 @@ export default function App() {
               </div>
               {renderTeamPanel(1)}
             </div>
+
+            {/* Stats do atleta selecionado — abaixo da quadra */}
+            {sp&&(
+              <div className="selected-bar below-court">
+                <span className="sel-badge">#{sp.number} {sp.name}</span>
+                <div className="sel-mini-stats">
+                  {[['PTS',sp.pts],['AST',sp.ast],['REB',sp.reb],['RO',sp.oreb],['STL',sp.stl],['BLK',sp.blk],['TO',sp.to]].map(([k,v])=>(
+                    <span key={k} className="mini-stat" data-warn={k==='TO'&&v>2}><b>{v}</b>{k}</span>
+                  ))}
+                  <span className="mini-stat" data-warn={sp.fouls>=FOUL_TROUBLE} data-danger={sp.fouls>=FOUL_DISQUALIFY}>
+                    <b>{sp.fouls}</b>FL
+                  </span>
+                  <span className="mini-stat"><b>{sp.foulsReceived||0}</b>FS</span>
+                  <span className="mini-stat" style={{color:'var(--muted)'}}><b>{sp.possessions||0}</b>POS</span>
+                  <span className="mini-stat" style={{color:sp.plusMinus>0?'var(--green)':sp.plusMinus<0?'var(--red)':''}}><b>{sp.plusMinus>=0?`+${sp.plusMinus}`:sp.plusMinus}</b>+/-</span>
+                </div>
+              </div>
+            )}
+
             {activeShots.length>0&&(
               <div className="shot-summary">
                 <span className="shot-sum-item made">● {activeShots.filter(s=>s.made).length} certos</span>

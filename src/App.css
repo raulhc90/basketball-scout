@@ -58,12 +58,12 @@ html, body, #root { height: 100%; background: var(--bg); }
 .home-sub { font-size:13px; color:var(--muted); letter-spacing:.04em; }
 .btn-new-game {
   width:100%; max-width:360px;
-  background: #fae92a; color: #000;
+  background: #fae92a; color:#1a1a1a;
   font-family:var(--fd); font-size:20px; font-weight:700; letter-spacing:.06em;
   border:none; border-radius:var(--r); padding:18px;
   cursor:pointer; transition:background .15s;
 }
-.btn-new-game:active { filter: brightness(0.9);}
+.btn-new-game:active { background:#e6d400; }
 
 .recent-games { width:100%; max-width:500px; display:flex; flex-direction:column; gap:8px; }
 .recent-label { font-family:var(--fd); font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); padding:0 4px 4px; }
@@ -973,67 +973,107 @@ tr[data-disq=true] { opacity:.6; }
   border-color: var(--accent);
   color: var(--accent);
 }
-.app-logo {
-  position: fixed;
-  bottom: 16px;
-  right: 16px;
-  width: 140px;
-  opacity: 0.85;
-  z-index: 999;
-  pointer-events: none; /* não atrapalha cliques */
-}
-.app-logo:hover {
-  opacity: 1;
-  transform: scale(1.05);
-}
-@media (max-width: 768px) {
-  .app-logo {
-    width: 45px;
-    bottom: 12px;
-    right: 12px;
-  }
-}
 
-.game-panels {
+/* ══════════════════════════════════════════════════
+   SCOREBOARD REDESIGN — clock-row + sub-score-btn
+   ══════════════════════════════════════════════════ */
+
+/* Wrapper time + botão sub */
+.team-score-wrap {
   display: flex;
-  gap: 12px;
+  align-items: center;
+  gap: 4px;
 }
 
-.team-panel {
-  flex: 1;
-}
-
-.game-layout {
-  display: grid;
-  grid-template-columns: 1fr 2fr 1fr;
-  gap: 12px;
-  align-items: start;
-}
-
-.side-panel {
-  background: #0f172a;
-  padding: 10px;
-  border-radius: 10px;
-  overflow-y: auto;
-}
-
-.court-container {
+/* Botão Sub ao lado do placar */
+.sub-score-btn {
+  background: var(--bg3);
+  border: 1.5px solid var(--border);
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 700;
+  font-family: var(--fd);
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  cursor: pointer;
   display: flex;
+  align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  transition: all .12s;
+}
+.sub-score-btn:active {
+  background: rgba(249,115,22,.15);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
-.actions {
-  margin-top: 10px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+/* Linha do cronômetro: play | clock | next-q | undo */
+.clock-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   gap: 6px;
 }
 
-.actions button {
-  padding: 8px;
+/* Botão desfazer no clock (compacto) */
+.undo-btn-clock {
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 15px;
+  font-family: var(--fd);
+  width: 36px;
+  height: 36px;
   border-radius: 6px;
-  background: #1f2937;
-  color: white;
-  font-size: 12px;
-  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all .12s;
 }
+.undo-btn-clock:active {
+  background: rgba(239,68,68,.15);
+  border-color: var(--red);
+  color: var(--red);
+}
+
+/* Next-Q btn: mesmo tamanho que play/pause */
+.next-q-btn {
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 50% !important;
+  font-size: 11px !important;
+  font-weight: 800;
+  padding: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.1;
+  text-align: center;
+}
+
+/* ══════════════════════════════════════════════════
+   SELECTED-BAR ABAIXO DA QUADRA
+   ══════════════════════════════════════════════════ */
+.selected-bar.below-court {
+  flex-wrap: wrap;
+  margin: 6px 8px 2px;
+  padding: 8px 12px;
+  gap: 6px;
+  border-radius: var(--r);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  justify-content: flex-start;
+}
+.selected-bar.below-court .sel-mini-stats {
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+/* ══════════════════════════════════════════════════
+   TURNOVER MODAL — grid de 3 opções
+   ══════════════════════════════════════════════════ */
+/* Reutiliza foul-types-grid — já estilizado */
