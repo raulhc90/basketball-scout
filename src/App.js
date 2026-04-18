@@ -357,16 +357,13 @@ function AssistModal({ players, scorerIdx, onSelect, onNone, onCancel }) {
     .map((p, i) => ({ p, i }))
     .filter(({ p, i }) => i !== scorerIdx && p.active && p.fouls < FOUL_DISQUALIFY && (p.techFouls||0) < TECH_DISQUALIFY);
   return (
-    <div className="assist-overlay">
-      <div className="assist-modal">
-        <div className="assist-modal-header">
-          <span>Quem deu a assistência?</span>
-          <button className="modal-close" onClick={onCancel}>✕</button>
-        </div>
-        <div className="assist-modal-body">
+    <div className="confirm-overlay">
+      <div className="confirm-modal" style={{maxWidth:'380px',width:'94%'}}>
+        <div className="confirm-title">Assistência?</div>
+        <div style={{padding:'4px 0 8px'}}>
           <button className="assist-none-btn" onClick={onNone}>Sem assistência</button>
-          {eligible.length === 0 && <div style={{padding:'12px 4px',color:'var(--muted)'}}>Nenhum atleta elegível</div>}
-          <div className="assist-players-grid">
+          {eligible.length === 0 && <div style={{padding:'12px 4px',color:'var(--muted)',textAlign:'center'}}>Nenhum atleta elegível</div>}
+          <div className="assist-players-grid" style={{marginTop:'8px'}}>
             {eligible.map(({ p, i }) => (
               <button key={i} className="assist-player-btn" onClick={() => onSelect(i)}>
                 <span className="assist-pnum">#{p.number}</span>
@@ -376,6 +373,7 @@ function AssistModal({ players, scorerIdx, onSelect, onNone, onCancel }) {
             ))}
           </div>
         </div>
+        <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
       </div>
     </div>
   );
@@ -436,21 +434,17 @@ function FoulModal({ player, teamFoulsInQuarter, onType, onCancel }) {
     { id:'ofensiva',       label:'Ofensiva',          desc:'Carrinho / fora da área', color:'#fb923c', isTech: false },
   ];
   return (
-    <div className="assist-overlay">
-      <div className="assist-modal">
-        <div className="assist-modal-header">
-          <span>Falta — #{player.number} {player.name.split(' ')[0]}</span>
-          <button className="modal-close" onClick={onCancel}>✕</button>
-        </div>
-        <div className="assist-modal-body">
+    <div className="confirm-overlay">
+      <div className="confirm-modal" style={{maxWidth:'380px',width:'94%'}}>
+        <div className="confirm-title">Falta — #{player.number} {player.name.split(' ')[0]}</div>
+        <div style={{padding:'0 0 8px'}}>
           {disq && <div className="foul-alert danger">ATENÇÃO: próxima falta = DISQUALIFICAÇÃO!</div>}
           {!disq && player.fouls >= FOUL_TROUBLE && <div className="foul-alert warn">Foul trouble: {player.fouls} faltas</div>}
-          {bonus && <div className="foul-alert info">Time em bonificação! ({teamFoulsInQuarter} faltas no quarto)</div>}
-          {(player.techFouls||0) >= TECH_DISQUALIFY - 1 && <div className="foul-alert danger">ATENÇÃO: 1 técnica/antidesportiva = substituição obrigatória!</div>}
+          {bonus && <div className="foul-alert info">Bonificação! ({teamFoulsInQuarter} faltas no período)</div>}
+          {(player.techFouls||0) >= TECH_DISQUALIFY - 1 && <div className="foul-alert danger">1 técnica = substituição obrigatória!</div>}
           <div className="foul-info-row">
-            <span>Faltas: <b>{player.fouls}</b></span>
-            <span>Técnicas: <b>{player.techFouls||0}</b></span>
-            <span>Time no quarto: <b>{teamFoulsInQuarter}</b></span>
+            <span>FL: <b>{player.fouls}</b></span>
+            <span>Téc: <b>{player.techFouls||0}</b></span>
           </div>
           <div className="foul-types-grid">
             {types.map(t => (
@@ -461,6 +455,7 @@ function FoulModal({ player, teamFoulsInQuarter, onType, onCancel }) {
             ))}
           </div>
         </div>
+        <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
       </div>
     </div>
   );
@@ -987,9 +982,12 @@ export default function App() {
 
   // ── startGame ───────────────────────────────────────────────────────────────
   const startGame = (nameA, nameB, rosterA, rosterB, startingTeam) => {
-    const g = newGame(nameA, nameB, rosterA, rosterB);
-    // Posse inicial: time que começa com a posse já conta 1
-    g.possessions = startingTeam === 0 ? [1,0] : [0,1];
+    const g = {
+      ...newGame(nameA, nameB, rosterA, rosterB),
+      possessions: startingTeam === 0 ? [1,0] : [0,1],
+      firstPossTeam: startingTeam,
+      adversaryHadPoss: false,
+    };
     setGame(g);
     setShowNewGame(false);
     setScreen('game');
@@ -1206,12 +1204,18 @@ export default function App() {
         team:g.teams[activeTeam].name, player:`#${sp.number} ${sp.name.split(' ')[0]}`,
         action:made?(three?'3pts':'2pts'):(three?'3x falha':'2x falha'), pts, color:col });
 
-      // Arremesso conta posse do time atacante, exceto quando há rebote ofensivo (keepPossession)
       const gBase = { ...g, teams, log:[...entries,...g.log] };
-      return keepPossession ? gBase : endPossession(gBase, activeTeam, playerIdx);
+      if (keepPossession) return gBase;
+      if (made) return endPossession(gBase, activeTeam, playerIdx);
+      return endPossession(gBase, 1 - activeTeam, null);
     });
 
-    if (made) showToast(`+${pts}${assistIdx!==null?' + assist':''}`);
+    if (made) {
+      showToast(`+${pts}${assistIdx!==null?' + assist':''}`);
+      setActiveTeam(prev => 1 - prev);
+      setSelectedPlayerA(null);
+      setSelectedPlayerB(null);
+    }
     setAssistPending(null);
   }, [activeTeam, setGameWithUndo, endPossession]);
 
