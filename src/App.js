@@ -117,6 +117,16 @@ function exportShotsCSV(game) {
 }
 
 // ─── classifyShot ─────────────────────────────────────────────────────────────
+// Retorna direção de ataque considerando troca de lado no intervalo (Q2+)
+function getAttackDir(teamIdx, quarter) {
+  // Times trocam de lado a partir do 3Q (quarter index 2)
+  // Time 0: Q0,Q1 → right; Q2+ → left
+  // Time 1: Q0,Q1 → left;  Q2+ → right
+  const baseRight = teamIdx === 0;
+  const swapped = quarter >= 2;
+  return (baseRight !== swapped) ? 'right' : 'left';
+}
+
 function classifyShot(xPct, yPct, attackDir) {
   const W = 600, H = 320, cy = 160;
   const cx1 = 34, cx2 = 566;
@@ -464,13 +474,10 @@ function TurnoverModal({ activeTeamPlayers, onType, onCancel }) {
 
   if (step === 'type') {
     return (
-      <div className="assist-overlay">
-        <div className="assist-modal">
-          <div className="assist-modal-header">
-            <span>Tipo de Turnover</span>
-            <button className="modal-close" onClick={onCancel}>✕</button>
-          </div>
-          <div className="assist-modal-body">
+      <div className="confirm-overlay">
+        <div className="confirm-modal" style={{maxWidth:'360px',width:'92%'}}>
+          <div className="confirm-title">Tipo de Turnover</div>
+          <div style={{padding:'0 0 8px'}}>
             <div className="foul-types-grid">
               <button className="foul-type-btn" style={{'--fc':'#10b981'}}
                 onClick={() => { setToType('roubo'); setStep('stealer'); }}>
@@ -489,6 +496,7 @@ function TurnoverModal({ activeTeamPlayers, onType, onCancel }) {
               </button>
             </div>
           </div>
+          <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
         </div>
       </div>
     );
@@ -696,14 +704,33 @@ function HeatMap({ shots, teamName, attackDir }) {
 }
 
 // ─── NewGameModal ─────────────────────────────────────────────────────────────
+const BLANK_PLAYER = () => ({ number: '', name: '' });
 function NewGameModal({ onStart, onClose }) {
   const [startingTeam, setStartingTeam] = useState(0);
   const [nameA, setNameA] = useState('Time A');
   const [nameB, setNameB] = useState('Time B');
+  // Começa com 5 jogadores vazios por time
   const [players, setPlayers] = useState({
-    a: DEFAULT_TEAM_A.map(p=>({...p})), b: DEFAULT_TEAM_B.map(p=>({...p}))
+    a: Array.from({length:5}, BLANK_PLAYER),
+    b: Array.from({length:5}, BLANK_PLAYER),
   });
   const upd = (t,i,f,v) => setPlayers(prev=>({...prev,[t]:prev[t].map((p,j)=>j===i?{...p,[f]:v}:p)}));
+  const addPlayer = (t) => setPlayers(prev => {
+    if (prev[t].length >= 15) return prev;
+    return { ...prev, [t]: [...prev[t], BLANK_PLAYER()] };
+  });
+  const removePlayer = (t, i) => setPlayers(prev => ({
+    ...prev, [t]: prev[t].filter((_,j) => j !== i)
+  }));
+
+  const handleStart = () => {
+    // Filtra jogadores com número e nome preenchidos
+    const rosterA = players.a.filter(p => p.number.trim() && p.name.trim());
+    const rosterB = players.b.filter(p => p.number.trim() && p.name.trim());
+    if (rosterA.length === 0 || rosterB.length === 0) { alert('Cadastre ao menos 1 jogador por time.'); return; }
+    onStart(nameA, nameB, rosterA, rosterB, startingTeam);
+  };
+
   return (
     <div className="modal-overlay">
       <div className="modal">
@@ -717,10 +744,16 @@ function NewGameModal({ onStart, onClose }) {
                 <div className="modal-roster">
                   {players[key].map((p,i)=>(
                     <div key={i} className="modal-player-row">
-                      <input className="num-input" value={p.number} maxLength={2} onChange={e=>upd(key,i,'number',e.target.value)}/>
-                      <input className="name-inp" value={p.name} onChange={e=>upd(key,i,'name',e.target.value)}/>
+                      <input className="num-input" value={p.number} maxLength={2} placeholder="#" onChange={e=>upd(key,i,'number',e.target.value)}/>
+                      <input className="name-inp" value={p.name} placeholder="Nome" onChange={e=>upd(key,i,'name',e.target.value)}/>
+                      {players[key].length > 1 && (
+                        <button className="rm-player-btn" onClick={()=>removePlayer(key,i)} title="Remover">✕</button>
+                      )}
                     </div>
                   ))}
+                  {players[key].length < 15 && (
+                    <button className="add-player-btn" onClick={()=>addPlayer(key)}>+ Jogador</button>
+                  )}
                 </div>
               </div>
             ))}
@@ -740,7 +773,7 @@ function NewGameModal({ onStart, onClose }) {
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn-start" onClick={()=>onStart(nameA,nameB,players.a,players.b,startingTeam)}>Iniciar Jogo</button>
+          <button className="btn-start" onClick={handleStart}>Iniciar Jogo</button>
         </div>
       </div>
     </div>
@@ -834,9 +867,23 @@ export default function App() {
 
   const showToast = msg => { setToast(msg); setTimeout(()=>setToast(null),1800); };
 
-  // ── Posse: função pura que incrementa posses do time e do atleta ─────────
-  // Retorna novo game state com possessions[teamIdx]++ e players[teamIdx][playerIdx].possessions++
+  // ── Posse: incrementa possessions respeitando regra da 1ª posse ──────────
+  // O time que iniciou o jogo só conta nova posse após o adversário ter tido 1.
   const endPossession = useCallback((g, teamIdx, playerIdx = null) => {
+    const fpt = g.firstPossTeam !== undefined ? g.firstPossTeam : -1;
+    let adversaryHadPoss = g.adversaryHadPoss || false;
+
+    // Se o adversário do firstPossTeam está tendo sua primeira posse, marcar
+    if (fpt !== -1 && !adversaryHadPoss && teamIdx !== fpt) {
+      adversaryHadPoss = true;
+    }
+
+    // firstPossTeam tentando contar nova posse antes do adversário ter jogado → ignorar
+    const shouldSkip = fpt !== -1 && teamIdx === fpt && !adversaryHadPoss;
+    if (shouldSkip) {
+      return { ...g, adversaryHadPoss };
+    }
+
     const possessions = [...(g.possessions || [0,0])];
     possessions[teamIdx] = (possessions[teamIdx]||0) + 1;
     const teams = g.teams.map((t, ti) => {
@@ -848,7 +895,7 @@ export default function App() {
         )
       };
     });
-    return { ...g, possessions, teams };
+    return { ...g, possessions, teams, adversaryHadPoss };
   }, []);
 
   // ── setGameWithUndo ─────────────────────────────────────────────────────────
@@ -1177,7 +1224,7 @@ export default function App() {
     const rect = e.currentTarget.getBoundingClientRect();
     const xPct = (e.clientX-rect.left)/rect.width*100;
     const yPct = (e.clientY-rect.top)/rect.height*100;
-    const dir = activeTeam===0?'right':'left';
+    const dir = getAttackDir(activeTeam, game.quarter);
     const { valid, three, inPaint } = classifyShot(xPct,yPct,dir);
     if (!valid) { showToast('Arremesso no lado errado da quadra'); return; }
     setConfirmShot({ xPct, yPct, three, inPaint });
@@ -1520,13 +1567,20 @@ export default function App() {
               <button className="next-q-btn"
                 data-finished={game.quarter>=3&&game.teams[0].score!==game.teams[1].score}
                 onClick={()=>{
-                  if(game.quarter>=3){
-                    const[s0,s1]=[game.teams[0].score,game.teams[1].score];
-                    if(s0!==s1){setGame(g=>({...g,finished:true}));return;}
+                  const[s0,s1]=[game.teams[0].score,game.teams[1].score];
+                  // Após 4T: se empatado vai pra OT; se desempatado finaliza
+                  if(game.quarter>=3 && s0!==s1){
+                    setGame(g=>({...g,finished:true}));
+                    return;
+                  }
+                  // Após qualquer OT: só avança se ainda empatado
+                  if(game.quarter>=4 && s0===s1){
+                    nextQuarter();
+                    return;
                   }
                   nextQuarter();
                 }}>
-                {game.quarter>=3&&game.teams[0].score!==game.teams[1].score?'Fim':`›${getQuarterLabel(game.quarter+1)}`}
+                {game.quarter>=3&&game.teams[0].score!==game.teams[1].score?'Finalizar':`›${getQuarterLabel(game.quarter+1)}`}
               </button>
               <button className="undo-btn-clock" onClick={undoLastAction} title="Desfazer">↩</button>
             </div>
@@ -1596,7 +1650,7 @@ export default function App() {
               {renderTeamPanel(0)}
               <div className="court-container">
                 <BasketballCourt shots={activeShots} onCourtClick={handleCourtClick}
-                  hasPlayer={selectedPlayer!==null} attackDir={activeTeam===0?'right':'left'}/>
+                  hasPlayer={selectedPlayer!==null} attackDir={getAttackDir(activeTeam, game.quarter)}/>
               </div>
               {renderTeamPanel(1)}
             </div>
@@ -1733,7 +1787,7 @@ export default function App() {
         <main className="heatmap-view">
           {game.teams.map((team,ti)=>(
             <HeatMap key={ti} shots={team.players.flatMap(p=>p.shots||[])}
-              teamName={team.name} attackDir={ti===0?'right':'left'}/>
+              teamName={team.name} attackDir={getAttackDir(ti, game.quarter)}/>
           ))}
         </main>
       )}

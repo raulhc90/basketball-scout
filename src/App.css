@@ -137,15 +137,15 @@ html, body, #root { height: 100%; background: var(--bg); }
   padding:4px 10px; border-radius:5px; cursor:pointer;
 }
 
-.scoreboard { display:flex; align-items:center; justify-content:space-between; padding:6px 12px 6px; gap:6px; }
-.team-score { display:flex; flex-direction:column; align-items:flex-start; gap:2px; cursor:pointer; padding:5px 8px; border-radius:var(--r); border:1.5px solid transparent; transition:all .15s; min-width:85px; }
+.scoreboard { display:flex; align-items:center; justify-content:center; padding:6px 8px 6px; gap:6px; }
+.team-score { display:flex; flex-direction:column; align-items:flex-start; gap:2px; cursor:pointer; padding:5px 6px; border-radius:var(--r); border:1.5px solid transparent; transition:all .15s; min-width:70px; max-width:110px; }
 .team-score.right { align-items:flex-end; }
 .team-score[data-active=true] { border-color:var(--accent); background:rgba(249,115,22,.08); }
 .team-name { font-family:var(--fd); font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
 .team-score[data-active=true] .team-name { color:var(--acc2); }
 .score { font-family:var(--fd); font-size:40px; font-weight:800; line-height:1; letter-spacing:-.02em; }
 
-.center-info { display:flex; flex-direction:column; align-items:center; gap:2px; flex:1; }
+.center-info { display:flex; flex-direction:column; align-items:center; gap:2px; flex:0 0 auto; min-width:160px; }
 .quarter-label { font-family:var(--fd); font-size:10px; font-weight:700; letter-spacing:.15em; color:var(--accent); text-transform:uppercase; }
 .clock { font-family:var(--fd); font-size:30px; font-weight:700; letter-spacing:.04em; line-height:1; }
 .clock-btns { display:flex; gap:4px; }
@@ -1114,3 +1114,32 @@ tr[data-disq=true] { opacity:.6; }
    TURNOVER MODAL — grid de 3 opções
    ══════════════════════════════════════════════════ */
 /* Reutiliza foul-types-grid — já estilizado */
+
+/* ── NewGameModal: add/remove player ── */
+.add-player-btn {
+  width: 100%;
+  background: rgba(249,115,22,.08);
+  border: 1.5px dashed rgba(249,115,22,.4);
+  color: var(--accent);
+  font-family: var(--fd);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px;
+  border-radius: var(--r);
+  cursor: pointer;
+  margin-top: 4px;
+  transition: all .12s;
+}
+.add-player-btn:active { background: rgba(249,115,22,.18); }
+.rm-player-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0 4px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.rm-player-btn:active { color: var(--red); }
+.modal-player-row { display:flex; gap:5px; align-items:center; }
