@@ -283,15 +283,12 @@ function MissedShotReboundModal({ attackingPlayers, onRebound, onNoRebound, onCa
   // step === 'pick': selecionar quem pegou o rebote ofensivo
   const eligible = attackingPlayers.filter(p => p.active && p.fouls < FOUL_DISQUALIFY);
   return (
-    <div className="assist-overlay">
-      <div className="assist-modal">
-        <div className="assist-modal-header">
-          <span>Quem pegou o rebote ofensivo?</span>
-          <button className="modal-close" onClick={onCancel}>✕</button>
-        </div>
-        <div className="assist-modal-body">
+    <div className="confirm-overlay">
+      <div className="confirm-modal" style={{maxWidth:'380px',width:'94%'}}>
+        <div className="confirm-title">Quem pegou o rebote?</div>
+        <div style={{padding:'0 0 8px'}}>
           <button className="assist-none-btn" onClick={() => onRebound(null)}>Não identificado</button>
-          <div className="assist-players-grid">
+          <div className="assist-players-grid" style={{marginTop:'8px'}}>
             {eligible.map((p, i) => {
               const realIdx = attackingPlayers.indexOf(p);
               return (
@@ -304,6 +301,7 @@ function MissedShotReboundModal({ attackingPlayers, onRebound, onNoRebound, onCa
             })}
           </div>
         </div>
+        <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
       </div>
     </div>
   );
@@ -500,15 +498,12 @@ function TurnoverModal({ activeTeamPlayers, onType, onCancel }) {
   // step === 'stealer': selecionar jogador adversário que roubou
   const eligible = activeTeamPlayers.filter(p => p.active && p.fouls < FOUL_DISQUALIFY);
   return (
-    <div className="assist-overlay">
-      <div className="assist-modal">
-        <div className="assist-modal-header">
-          <span>Quem roubou a bola?</span>
-          <button className="modal-close" onClick={onCancel}>✕</button>
-        </div>
-        <div className="assist-modal-body">
+    <div className="confirm-overlay">
+      <div className="confirm-modal" style={{maxWidth:'380px',width:'94%'}}>
+        <div className="confirm-title">Quem roubou a bola?</div>
+        <div style={{padding:'0 0 8px'}}>
           <button className="assist-none-btn" onClick={() => onType('roubo', null)}>Não identificado</button>
-          <div className="assist-players-grid">
+          <div className="assist-players-grid" style={{marginTop:'8px'}}>
             {eligible.map((p, i) => {
               const realIdx = activeTeamPlayers.indexOf(p);
               return (
@@ -522,6 +517,7 @@ function TurnoverModal({ activeTeamPlayers, onType, onCancel }) {
             })}
           </div>
         </div>
+        <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
       </div>
     </div>
   );
@@ -1488,10 +1484,14 @@ export default function App() {
             setReboundPending(null);
           }}
           onNoRebound={() => {
-            // Sem rebote ofensivo: registra arremesso errado, posse vai pro adversário
             const r = reboundPending;
-            commitShot(r.playerIdx, r.xPct, r.yPct, false, r.three, null, r.shotType, false /* keepPossession */);
+            const opp = 1 - activeTeam;
+            commitShot(r.playerIdx, r.xPct, r.yPct, false, r.three, null, r.shotType, false);
             setReboundPending(null);
+            // Adversário pegou: troca seletor para o time adversário
+            setActiveTeam(opp);
+            setSelectedPlayerA(null);
+            setSelectedPlayerB(null);
           }}
           onCancel={() => setReboundPending(null)}
         />
