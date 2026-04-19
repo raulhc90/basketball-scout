@@ -1400,3 +1400,70 @@ tr[data-disq=true] { opacity:.6; }
   .score { font-size: 36px; }
   .confirm-btn { font-size: 17px; padding: 15px 10px; }
 }
+
+/* ── Quadra: mais contraste nas linhas ── */
+.court-svg line,
+.court-svg rect,
+.court-svg circle,
+.court-svg path {
+  /* Herda as cores inline do SVG, mas podemos sobrescrever via filter */
+}
+/* Aumenta brilho geral da quadra */
+.court-svg {
+  filter: brightness(1.15) contrast(1.05);
+}
+/* Heatmap: sem filter extra para não distorcer as cores */
+.heatmap-wrap .court-svg {
+  filter: none;
+}
+
+/* ── Shot Summary Full ── */
+.shot-summary-full {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  margin: 6px 8px;
+  padding: 8px 0;
+  max-width: 596px;
+  margin-left: auto;
+  margin-right: auto;
+  overflow: hidden;
+}
+.shot-sum-row {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 6px;
+}
+.shot-sum-label {
+  font-family: var(--fd);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.shot-sum-val {
+  font-family: var(--fd);
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--accent);
+  line-height: 1;
+}
+.shot-sum-sub {
+  font-family: var(--fd);
+  font-size: 11px;
+  color: var(--muted);
+}
+.shot-sum-divider {
+  width: 1px;
+  height: 36px;
+  background: var(--border);
+  flex-shrink: 0;
+}

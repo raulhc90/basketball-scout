@@ -189,12 +189,12 @@ function BasketballCourt({ shots=[], onCourtClick, hasPlayer=false, attackDir='r
       onClick={onCourtClick}>
 
       <rect x="0" y="0" width={W} height={H} fill="#1a1f2a"/>
-      <path d={z3L} fill="rgba(59,130,246,0.07)"/>
-      <path d={z3R} fill="rgba(59,130,246,0.07)"/>
-      <rect x="2"    y={cy-paintH} width={ftX1}     height={paintH*2} fill="rgba(34,197,94,0.07)"/>
-      <rect x={ftX2} y={cy-paintH} width={W-2-ftX2} height={paintH*2} fill="rgba(34,197,94,0.07)"/>
+      <path d={z3L} fill="rgba(59,130,246,0.11)"/>
+      <path d={z3R} fill="rgba(59,130,246,0.11)"/>
+      <rect x="2"    y={cy-paintH} width={ftX1}     height={paintH*2} fill="rgba(34,197,94,0.12)"/>
+      <rect x={ftX2} y={cy-paintH} width={W-2-ftX2} height={paintH*2} fill="rgba(34,197,94,0.12)"/>
 
-      <g stroke="#4a5570" strokeWidth="1" fill="none">
+      <g stroke="#7a8fb8" strokeWidth="1.2" fill="none">
         <rect x="2" y="2" width={W-4} height={H-4} rx="2"/>
         <line x1={W/2} y1="2" x2={W/2} y2={H-2}/>
         <circle cx={W/2} cy={cy} r="38"/>
@@ -206,7 +206,7 @@ function BasketballCourt({ shots=[], onCourtClick, hasPlayer=false, attackDir='r
         <path d={`M ${cx2} ${cy-23} A 23 23 0 0 0 ${cx2} ${cy+23}`}/>
       </g>
 
-      <g stroke="#5a6a95" strokeWidth="1.6" fill="none" strokeLinecap="round">
+      <g stroke="#8899cc" strokeWidth="1.8" fill="none" strokeLinecap="round">
         <line x1="2" y1={latY1} x2={arcX1} y2={latY1}/>
         <path d={`M ${arcX1} ${latY1} A ${arcR} ${arcR} 0 0 1 ${arcX1} ${latY2}`}/>
         <line x1={arcX1} y1={latY2} x2="2" y2={latY2}/>
@@ -563,7 +563,7 @@ function SubModal({ title, reason, players, outPlayerIdx, onSub, onCancel, canCa
 }
 
 // ─── HeatMap ──────────────────────────────────────────────────────────────────
-function HeatMap({ shots, teamName, attackDir }) {
+function HeatMap({ shots, teamName, attackDir, teamIdx=0 }) {
   const W = 600, H = 320, cy = 160;
   const RADIUS = 38;
   const clusters = [];
@@ -613,6 +613,40 @@ function HeatMap({ shots, teamName, attackDir }) {
           return <circle key={i} cx={cl.cx} cy={cl.cy} r={r} fill={`url(#hg${i})`}/>;
         })}
 
+        {/* Destaque de zona de ataque por período */}
+        {(()=>{
+          // Q1/Q2: time 0 ataca direita (x>300), time 1 ataca esquerda (x<300)
+          // Q3/Q4: lados invertidos
+          // Mostra overlay sutil: 1º tempo = left half, 2º tempo = right half (ou vice-versa)
+          const halfW = W/2;
+          // Q1/Q2 attack zone for this team
+          const q12dir = teamIdx === 0 ? 'right' : 'left';
+          // Q3/Q4 attack zone (inverted)
+          const q34dir = teamIdx === 0 ? 'left' : 'right';
+          return (<>
+            {/* 1º Tempo — label */}
+            <text x={q12dir==='right'? W*0.75 : W*0.25} y="14"
+              fill="rgba(250,233,42,0.55)" fontSize="9" fontFamily="sans-serif"
+              fontWeight="bold" textAnchor="middle" letterSpacing="1">1º TEMPO</text>
+            <line x1={halfW} y1="2" x2={halfW} y2={H-2}
+              stroke="rgba(250,233,42,0.3)" strokeWidth="2" strokeDasharray="6 4"/>
+            {/* 2º Tempo — label */}
+            <text x={q34dir==='right'? W*0.75 : W*0.25} y="14"
+              fill="rgba(59,130,246,0.55)" fontSize="9" fontFamily="sans-serif"
+              fontWeight="bold" textAnchor="middle" letterSpacing="1">2º TEMPO</text>
+            {/* Tint sutil no lado de ataque do 1º tempo */}
+            <rect
+              x={q12dir==='right'? halfW : 0} y={0}
+              width={halfW} height={H}
+              fill="rgba(250,233,42,0.03)" pointerEvents="none"/>
+            {/* Tint sutil no lado de ataque do 2º tempo */}
+            <rect
+              x={q34dir==='right'? halfW : 0} y={0}
+              width={halfW} height={H}
+              fill="rgba(59,130,246,0.03)" pointerEvents="none"/>
+          </>);
+        })()}
+
         {/* Zonas 3pts — mesmo que BasketballCourt */}
         {(()=>{
           const arcX1=67,arcX2=533,arcR=145,latY1=19,latY2=301,paintH=52;
@@ -629,7 +663,7 @@ function HeatMap({ shots, teamName, attackDir }) {
             <path d={cornerTL+' '+cornerBL+' '+corridorL+' '+beyondL} fill="rgba(59,130,246,0.07)"/>
             <path d={cornerTR+' '+cornerBR+' '+corridorR+' '+beyondR} fill="rgba(59,130,246,0.07)"/>
             <rect x="2" y={cy-paintH} width={ftX1} height={paintH*2} fill="rgba(34,197,94,0.07)"/>
-            <rect x={ftX2} y={cy-paintH} width={W-2-ftX2} height={paintH*2} fill="rgba(34,197,94,0.07)"/>
+            <rect x={ftX2} y={cy-paintH} width={W-2-ftX2} height={paintH*2} fill="rgba(34,197,94,0.12)"/>
             {/* Linhas estruturais */}
             <g stroke="#4a5570" strokeWidth="1" fill="none">
               <rect x="2" y="2" width={W-4} height={H-4} rx="2"/>
@@ -643,7 +677,7 @@ function HeatMap({ shots, teamName, attackDir }) {
               <path d={`M ${cx2} ${cy-23} A 23 23 0 0 0 ${cx2} ${cy+23}`}/>
             </g>
             {/* Linha 3pts */}
-            <g stroke="#5a6a95" strokeWidth="1.6" fill="none" strokeLinecap="round">
+            <g stroke="#8899cc" strokeWidth="1.8" fill="none" strokeLinecap="round">
               <line x1="2" y1={latY1} x2={arcX1} y2={latY1}/>
               <path d={`M ${arcX1} ${latY1} A ${arcR} ${arcR} 0 0 1 ${arcX1} ${latY2}`}/>
               <line x1={arcX1} y1={latY2} x2="2" y2={latY2}/>
@@ -718,7 +752,10 @@ function NewGameModal({ onStart, onClose }) {
     // Filtra jogadores com número e nome preenchidos
     const rosterA = players.a.filter(p => p.number.trim() && p.name.trim());
     const rosterB = players.b.filter(p => p.number.trim() && p.name.trim());
-    if (rosterA.length === 0 || rosterB.length === 0) { alert('Cadastre ao menos 1 jogador por time.'); return; }
+    if (rosterA.length < 5 || rosterB.length < 5) {
+      alert(`Cada time precisa ter ao menos 5 jogadores cadastrados.\n${rosterA.length < 5 ? nameA + ' tem ' + rosterA.length + ' jogador(es).' : ''}\n${rosterB.length < 5 ? nameB + ' tem ' + rosterB.length + ' jogador(es).' : ''}`);
+      return;
+    }
     onStart(nameA, nameB, rosterA, rosterB, startingTeam);
   };
 
@@ -1042,6 +1079,19 @@ export default function App() {
     }));
     const out = game.teams[activeTeam].players[outIdx];
     const inn = game.teams[activeTeam].players[inIdx];
+    // Log da substituição
+    setGame(g => {
+      const entry = {
+        id: Date.now(),
+        q: getQuarterLabel(g.quarter),
+        time: fmtTime(g.clock),
+        team: g.teams[activeTeam].name,
+        player: `#${out.number} ${out.name.split(' ')[0]}`,
+        action: `↕ Saiu → #${inn.number} ${inn.name.split(' ')[0]}`,
+        pts: 0, color: '#64748b'
+      };
+      return { ...g, log: [entry, ...g.log] };
+    });
     showToast(`↕ ${out.name.split(' ')[0]} → ${inn.name.split(' ')[0]}`);
     setSubModal(null); setSelectedPlayerA(null); setSelectedPlayerB(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1065,6 +1115,18 @@ export default function App() {
     }));
     const out = game.teams[activeTeam].players[outIdx];
     const inn = game.teams[activeTeam].players[inIdx];
+    setGame(g => {
+      const entry = {
+        id: Date.now(),
+        q: getQuarterLabel(g.quarter),
+        time: fmtTime(g.clock),
+        team: g.teams[activeTeam].name,
+        player: `#${out.number} ${out.name.split(' ')[0]}`,
+        action: `↕ Saiu → #${inn.number} ${inn.name.split(' ')[0]}`,
+        pts: 0, color: '#64748b'
+      };
+      return { ...g, log: [entry, ...g.log] };
+    });
     showToast(`↕ ${out.name.split(' ')[0]} → ${inn.name.split(' ')[0]}`);
     setSubModal(null); setSelectedPlayerA(null); setSelectedPlayerB(null);
   }, [game, activeTeam, running]);
@@ -1202,7 +1264,11 @@ export default function App() {
 
       const gBase = { ...g, teams, log:[...entries,...g.log] };
       if (keepPossession) return gBase;
-      if (made) return endPossession(gBase, activeTeam, playerIdx);
+      if (made) {
+        // Cesto: o time que marcou USOU a posse dele → próxima posse é do adversário
+        return endPossession(gBase, 1 - activeTeam, null);
+      }
+      // Erro: adversário pega a bola → posse do adversário
       return endPossession(gBase, 1 - activeTeam, null);
     });
 
@@ -1677,14 +1743,42 @@ export default function App() {
               </div>
             )}
 
-            {activeShots.length>0&&(
-              <div className="shot-summary">
-                <span className="shot-sum-item made">● {activeShots.filter(s=>s.made).length} certos</span>
-                <span className="shot-sum-item missed">✕ {activeShots.filter(s=>!s.made).length} errados</span>
-                <span className="shot-sum-item pct">{pct(activeShots.filter(s=>s.made).length,activeShots.length)} FG</span>
-                <span className="shot-sum-item three">3pts: {pct(activeShots.filter(s=>s.made&&s.three).length,activeShots.filter(s=>s.three).length)}</span>
-              </div>
-            )}
+            {activeShots.length>0&&(()=>{
+              const twos  = activeShots.filter(s=>!s.three);
+              const threes= activeShots.filter(s=>s.three);
+              const sp2m  = twos.filter(s=>s.made).length;
+              const sp3m  = threes.filter(s=>s.made).length;
+              // LL vem das stats do atleta ou soma dos shots não tem LL
+              const ftm   = sp ? (sp.ftm||0) : td.players.reduce((a,p)=>a+(p.ftm||0),0);
+              const fta   = sp ? (sp.fta||0) : td.players.reduce((a,p)=>a+(p.fta||0),0);
+              return (
+                <div className="shot-summary-full">
+                  <div className="shot-sum-row">
+                    <span className="shot-sum-label">FG</span>
+                    <span className="shot-sum-val">{pct(activeShots.filter(s=>s.made).length,activeShots.length)}</span>
+                    <span className="shot-sum-sub">{activeShots.filter(s=>s.made).length}/{activeShots.length}</span>
+                  </div>
+                  <div className="shot-sum-divider"/>
+                  <div className="shot-sum-row">
+                    <span className="shot-sum-label">2pts</span>
+                    <span className="shot-sum-val">{pct(sp2m,twos.length)}</span>
+                    <span className="shot-sum-sub">{sp2m}/{twos.length}</span>
+                  </div>
+                  <div className="shot-sum-divider"/>
+                  <div className="shot-sum-row">
+                    <span className="shot-sum-label">3pts</span>
+                    <span className="shot-sum-val">{pct(sp3m,threes.length)}</span>
+                    <span className="shot-sum-sub">{sp3m}/{threes.length}</span>
+                  </div>
+                  <div className="shot-sum-divider"/>
+                  <div className="shot-sum-row">
+                    <span className="shot-sum-label">LL</span>
+                    <span className="shot-sum-val">{pct(ftm,fta)}</span>
+                    <span className="shot-sum-sub">{ftm}/{fta}</span>
+                  </div>
+                </div>
+              );
+            })()}
           </section>
         </main>
       )}
@@ -1791,7 +1885,8 @@ export default function App() {
         <main className="heatmap-view">
           {game.teams.map((team,ti)=>(
             <HeatMap key={ti} shots={team.players.flatMap(p=>p.shots||[])}
-              teamName={team.name} attackDir={getAttackDir(ti, game.quarter)}/>
+              teamName={team.name} attackDir={getAttackDir(ti, game.quarter)}
+              teamIdx={ti}/>
           ))}
         </main>
       )}
