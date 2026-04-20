@@ -33,7 +33,7 @@ html, body, #root { height: 100%; background: var(--bg); }
   font-family: var(--fb);
   display: flex;
   flex-direction: column;
-  max-width: 600px;
+  max-width: 100%;
   margin: 0 auto;
 }
 
@@ -191,31 +191,34 @@ html, body, #root { height: 100%; background: var(--bg); }
 .actions-row { display:flex; gap:6px; padding:0 10px; }
 .actions-row.wrap { flex-wrap:wrap; }
 
-/* ── Layout 3 colunas: team-panel-esq | court-container | team-panel-dir ── */
+/* ════════════════════════════════════════════════════
+   LAYOUT RESPONSIVO — 3 COLUNAS ADAPTATIVO
+   Mobile  (<640px): 1 coluna, empilhado
+   Tablet  (640-1199px): 2 ou 3 colunas
+   Desktop (≥1200px): 3 colunas largas
+════════════════════════════════════════════════════ */
+
 .game-layout {
   display: flex;
-  flex-direction: row;
-  align-items: flex-start;
+  flex-direction: column;   /* mobile: empilhado */
   width: 100%;
-  overflow: hidden;
-  flex: 1;
+  min-height: 0;
 }
 
-/* Por padrão (retrato/mobile): empilha verticalmente */
-@media (orientation: portrait), (max-width: 700px) {
-  .game-layout { flex-direction: column; }
-  .team-panel { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
-  .team-panel:last-child { border-left: none; border-top: 1px solid var(--border); }
-}
-
-/* Landscape / wide: 3 colunas */
-@media (orientation: landscape) {
+/* ── Tablet vertical e horizontal (640px+) ── */
+@media (min-width: 640px) {
+  .game-layout {
+    flex-direction: row;
+    align-items: flex-start;
+    flex: 1;
+    overflow: hidden;
+    height: 100%;
+  }
   .team-panel {
-    flex: 0 0 200px;
-    min-width: 0;
-    border-right: 1px solid var(--border);
+    flex: 0 0 180px;
     overflow-y: auto;
-    max-height: calc(100vh - 180px);
+    border-right: 1px solid var(--border);
+    max-height: calc(100vh - 175px);
   }
   .team-panel:last-child {
     border-right: none;
@@ -224,6 +227,45 @@ html, body, #root { height: 100%; background: var(--bg); }
   .court-container {
     flex: 1;
     min-width: 0;
+    max-width: none !important;   /* ocupa todo o espaço disponível */
+    padding: 8px !important;
+  }
+  .court-svg {
+    width: 100%;
+    height: auto;
+  }
+  .scout-view {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+/* ── Desktop (1200px+): painéis mais largos ── */
+@media (min-width: 1200px) {
+  .team-panel {
+    flex: 0 0 240px;
+  }
+  .players-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5px;
+    padding: 0 10px 10px;
+  }
+  .action-btn {
+    font-size: 13px;
+    padding: 11px 6px;
+    min-height: 52px;
+  }
+}
+
+/* ── Desktop grande (1600px+) ── */
+@media (min-width: 1600px) {
+  .team-panel {
+    flex: 0 0 280px;
+  }
+  .players-grid {
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 
@@ -273,7 +315,17 @@ td[data-warn=true] { color:var(--yellow); font-weight:700; }
 .shot-mode-btn:disabled { opacity:.35; cursor:not-allowed; }
 .shot-mode-btn.active { background:rgba(34,197,94,.12); border-color:var(--green); color:var(--green); }
 .shot-hint { padding:6px 14px 8px; font-size:12px; color:var(--green); font-style:italic; }
-.court-container { padding:8px; max-width:580px; margin:0 auto; width:100%; }
+.court-container {
+  padding: 8px;
+  width: 100%;
+  margin: 0 auto;
+}
+/* Court SVG keeps aspect ratio — coordinates always 0-100% */
+.court-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
 .shot-map-wrap { position:relative; }
 .court-svg { width:100%; border-radius:var(--r); border:1px solid var(--border); }
 .shot-legend { display:flex; gap:16px; justify-content:center; padding:8px 0 0; font-family:var(--fd); font-size:13px; font-weight:600; }
@@ -309,106 +361,7 @@ td[data-warn=true] { color:var(--yellow); font-weight:700; }
    Ativa quando largura > altura (celular/tablet deitado)
 ═══════════════════════════════════════════════════════ */
 
-@media (orientation: landscape) and (max-height: 600px) {
-
-  .app { max-width: 100%; flex-direction: column; }
-
-  /* Header compacto */
-  .header-top { padding: 4px 10px 2px; }
-  .scoreboard { padding: 4px 10px; }
-  .score { font-size: 28px; }
-  .clock { font-size: 22px; }
-  .quarter-label { font-size: 9px; }
-  .clock-btns button { font-size: 10px; padding: 2px 6px; }
-  .nav-btn { padding: 6px 0; font-size: 11px; }
-  .team-name { font-size: 10px; }
-  .team-score { min-width: 70px; padding: 3px 6px; }
-
-  /* Scout: tabs full width */
-  .scout-view { overflow-y: auto; }
-  .team-tabs { width: 100%; }
-
-  /* game-layout: 3 colunas em landscape pequeno */
-  .game-layout { flex-direction: row !important; }
-  .team-panel {
-    flex: 0 0 160px !important;
-    overflow-y: auto;
-    max-height: calc(100vh - 160px);
-  }
-  .players-grid { grid-template-columns: repeat(2, 1fr); gap: 4px; padding: 0 6px 8px; }
-  .player-btn { padding: 6px 2px; }
-  .pnum { font-size: 13px; }
-  .pname { font-size: 10px; }
-  .ppts { font-size: 10px; }
-
-  .court-section-header { padding: 4px 8px; }
-  .court-container { padding: 4px 8px; }
-  .shot-summary { padding: 4px 8px; flex-wrap: wrap; gap: 6px; }
-
-  .actions-group-label { padding: 4px 10px 3px; font-size: 10px; }
-  .actions-row { gap: 4px; padding: 0 6px; }
-  .action-btn { font-size: 13px; padding: 10px 4px; min-width: 0; }
-  .actions-group { margin-bottom: 4px; }
-
-  /* Selected bar compacta */
-  .selected-bar { padding: 5px 10px; }
-  .sel-badge { font-size: 13px; }
-  .mini-stat b { font-size: 13px; }
-  .mini-stat { font-size: 10px; }
-
-  /* Stats em landscape: duas tabelas lado a lado */
-  .stats-view { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
-  .stats-block { flex: 1; min-width: 300px; }
-  .stats-header { padding: 8px 12px 6px; font-size: 13px; }
-  .stats-total-score { font-size: 18px; }
-  .stats-table { font-size: 11px; min-width: 300px; }
-  .stats-table th { font-size: 9px; padding: 4px; }
-  .stats-table td { padding: 5px 4px; }
-
-  /* Log em landscape */
-  .log-entry { padding: 6px 12px; }
-  .log-player { font-size: 13px; }
-  .log-action { font-size: 12px; }
-
-  /* Home em landscape */
-  .home-screen { padding: 16px; flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 16px; }
-  .home-logo { flex-direction: row; align-items: center; gap: 12px; margin-top: 0; width: 100%; }
-  .home-title { font-size: 22px; }
-  .home-sub { font-size: 11px; }
-  .btn-new-game { max-width: 200px; padding: 12px; font-size: 16px; }
-  .recent-games { flex: 1; min-width: 280px; }
-  .game-card { padding: 8px 10px; }
-  .game-card-teams { font-size: 13px; }
-  .game-card-score { font-size: 16px; }
-}
-
-/* Tablet landscape (tela maior deitada) */
-@media (orientation: landscape) and (min-height: 600px) {
-
-  .app { max-width: 100%; }
-
-  .scoreboard { padding: 8px 20px; }
-  .score { font-size: 36px; }
-
-  /* Scout em 3 colunas com mais espaço */
-  .scout-view { flex-wrap: wrap; }
-  .team-tabs { width: 100%; }
-
-  .game-layout { flex-direction: row !important; }
-  .team-panel { flex: 0 0 200px !important; }
-  .players-grid { grid-template-columns: repeat(3, 1fr); }
-
-  .actions-section {
-    width: 220px;
-    flex-shrink: 0;
-    padding: 4px 0 12px;
-  }
-  .action-btn { font-size: 15px; padding: 13px 6px; }
-
-  /* Stats em duas colunas */
-  .stats-view { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
-  .stats-block { flex: 1; min-width: 400px; }
-}
+/* orientation queries removidos — substituídos por min-width */
 
 /* Shot hint e summary ajustes */
 .shot-hint {
@@ -1382,24 +1335,7 @@ tr[data-disq=true] { opacity:.6; }
 .export-btn-sm:active { border-color: var(--accent); color: var(--accent); }
 
 /* ── Tablet-specific: 2 cols de ações com mais espaço ── */
-@media (min-width: 768px) {
-  .action-btn {
-    font-size: 13px;
-    padding: 11px 6px;
-    min-height: 52px;
-  }
-  .player-btn {
-    min-height: 72px;
-    padding: 10px 6px;
-  }
-  .pnum { font-size: 18px; }
-  .pname { font-size: 12px; }
-  .ppts { font-size: 13px; }
-  .actions-group-label { font-size: 12px; }
-  .clock { font-size: 32px; }
-  .score { font-size: 36px; }
-  .confirm-btn { font-size: 17px; padding: 15px 10px; }
-}
+
 
 /* ── Quadra: mais contraste nas linhas ── */
 .court-svg line,
@@ -1466,4 +1402,111 @@ tr[data-disq=true] { opacity:.6; }
   height: 36px;
   background: var(--border);
   flex-shrink: 0;
+}
+
+
+/* ════════════════════════════════════════════════════
+   RESPONSIVE — SISTEMA COMPLETO POR min-width
+════════════════════════════════════════════════════ */
+
+/* ── Mobile (<640px): tudo empilhado ── */
+@media (max-width: 639px) {
+  .game-layout { flex-direction: column; }
+  .team-panel {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    max-height: none;
+    overflow-y: visible;
+  }
+  .team-panel:last-child { border-left: none; border-top: 1px solid var(--border); }
+  .players-grid { grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .court-container { padding: 6px !important; }
+  .selected-bar.below-court { margin: 4px 6px; }
+  .shot-summary-full { margin: 4px 6px; }
+  .header-top { padding: 6px 10px 3px; }
+  .scoreboard { padding: 4px 8px; gap: 8px; }
+  .score { font-size: 30px; }
+  .clock { font-size: 26px; }
+  .clock-play-btn { width: 38px; height: 38px; font-size: 16px; }
+  .next-q-btn { width: 38px !important; height: 38px !important; font-size: 10px !important; }
+}
+
+/* ── Tablet (640px–1199px) ── */
+@media (min-width: 640px) and (max-width: 1199px) {
+  .players-grid { grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .action-btn { font-size: 12px; padding: 10px 4px; min-height: 46px; }
+  .player-btn { min-height: 66px; }
+  .pnum { font-size: 15px; }
+  .pname { font-size: 11px; }
+  .actions-group-label { font-size: 11px; }
+  .team-panel { flex: 0 0 175px; }
+
+  /* Stats: 2 colunas */
+  .stats-view { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
+  .stats-block { flex: 1; min-width: 340px; }
+}
+
+/* ── Desktop (1200px+) ── */
+@media (min-width: 1200px) {
+  .app { display: flex; flex-direction: column; }
+  .header { position: sticky; top: 0; }
+
+  /* Scout: 3 colunas; quadra ocupa todo espaço central */
+  .game-layout {
+    flex-direction: row;
+    flex: 1;
+    height: calc(100vh - 175px);
+    overflow: hidden;
+  }
+  .team-panel {
+    flex: 0 0 240px;
+    max-height: none;
+    height: 100%;
+    overflow-y: auto;
+  }
+  .court-container {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 12px !important;
+  }
+  .court-svg { width: 100%; height: auto; max-height: calc(100vh - 280px); }
+
+  /* Painéis laterais sem scroll horizontal */
+  .actions-row.wrap { flex-wrap: wrap; gap: 6px; }
+  .action-btn { font-size: 13px; padding: 12px 6px; min-height: 50px; min-width: 52px; }
+  .players-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 0 12px 12px; }
+  .player-btn { min-height: 72px; padding: 10px 6px; }
+  .pnum { font-size: 17px; }
+  .pname { font-size: 12px; }
+  .ppts { font-size: 13px; }
+  .actions-group-label { font-size: 12px; padding: 8px 14px 5px; }
+
+  /* Stats: 2 colunas lado a lado */
+  .stats-view { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
+  .stats-block { flex: 1; min-width: 400px; }
+  .stats-table { font-size: 13px; }
+
+  /* Shot summary e selected bar alinhados */
+  .selected-bar.below-court { max-width: 100%; margin: 6px 0; }
+  .shot-summary-full { max-width: 100%; margin: 6px 0; }
+}
+
+/* ── Desktop grande (1600px+) ── */
+@media (min-width: 1600px) {
+  .team-panel { flex: 0 0 280px; }
+  .players-grid { grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .action-btn { font-size: 14px; padding: 13px 8px; min-height: 54px; }
+  .player-btn { min-height: 80px; }
+  .pnum { font-size: 20px; }
+  .team-panel { max-height: none; }
+}
+
+/* ── Garante quadra sem max-width em desktop ── */
+@media (min-width: 640px) {
+  .court-container { max-width: none !important; }
+  .selected-bar.below-court { max-width: none; }
+  .shot-summary-full { max-width: none; }
 }

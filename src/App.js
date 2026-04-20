@@ -1709,14 +1709,14 @@ export default function App() {
             ))}
           </div>
 
-          <section className="court-section">
+          <section className="court-section" style={{display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
             <div className="court-section-header">
               <div className="section-label" style={{padding:'8px 0 0'}}>
                 {selectedPlayer!==null?`Toque na quadra — #${sp?.number} ${sp?.name.split(' ')[0]}`:'Mapa — selecione um atleta'}
               </div>
               {selectedPlayer!==null&&<div className="court-active-badge">● ao vivo</div>}
             </div>
-            <div className="game-layout">
+            <div className="game-layout" style={{flex:1,minHeight:0}}>
               {renderTeamPanel(0)}
               <div className="court-container">
                 <BasketballCourt shots={activeShots} onCourtClick={handleCourtClick}
