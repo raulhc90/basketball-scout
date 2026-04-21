@@ -827,6 +827,9 @@ export default function App() {
   const [ftPlayer, setFtPlayer]         = useState(null);
   const [subModal, setSubModal]         = useState(null);
   const [dragPlayer, setDragPlayer]     = useState(null);
+  const [dragTeam, setDragTeam]         = useState(null);
+  const dragLongPress = useRef(null);
+  const dragPos = useRef({ x:0, y:0 });
   const [turnoverPending, setTurnoverPending] = useState(false);
   // reboundPending: { playerIdx, three, shotType } quando arremesso errado aguarda rebote
   const [reboundPending, setReboundPending] = useState(null);
@@ -1207,12 +1210,11 @@ export default function App() {
       const entry = { id:Date.now(), q:getQuarterLabel(g.quarter), time:fmtTime(g.clock),
         team:g.teams[ftTeamIdx].name, player:`#${pl.number} ${pl.name.split(' ')[0]}`,
         action:made?'LL certo':'LL erro', pts:made?1:0, color:made?'#f59e0b':'#475569' };
-      const gUpdated = { ...g, teams, log:[entry,...g.log] };
-      // LL convertido conta posse para o time que cobrou
-      return made ? endPossession(gUpdated, scoringTeam, playerIdx) : gUpdated;
+      // Lance livre NÃO conta posse — a posse já foi contada no arremesso que originou a falta
+      return { ...g, teams, log:[entry,...g.log] };
     });
     if (made) showToast(`+1 LL — ${pl.name.split(' ')[0]}`);
-  }, [game, setGameWithUndo, endPossession]);
+  }, [game, setGameWithUndo]);
 
   // ── commitShot ──────────────────────────────────────────────────────────────
   // keepPossession=true: arremesso errado mas com rebote ofensivo → não dá posse ao adversário
@@ -1436,23 +1438,45 @@ export default function App() {
               data-bench={!p.active}
               data-trouble={p.fouls>=FOUL_TROUBLE&&p.fouls<FOUL_DISQUALIFY}
               data-disq={p.fouls>=FOUL_DISQUALIFY||(p.techFouls||0)>=TECH_DISQUALIFY}
-              data-drag-over={dragPlayer!==null&&dragPlayer!==pi&&
+              data-drag-over={dragPlayer!==null&&dragTeam===teamIdx&&dragPlayer!==pi&&
                 ((team.players[dragPlayer]?.active&&!p.active)||(!team.players[dragPlayer]?.active&&p.active))}
-              draggable
-              onClick={()=>{ setActiveTeam(teamIdx); if(teamIdx===0)setSelectedPlayerA(pi); else setSelectedPlayerB(pi); }}
-              onDragStart={()=>setDragPlayer(pi)}
-              onDragEnd={()=>setDragPlayer(null)}
-              onDragOver={e=>e.preventDefault()}
-              onDrop={()=>{
-                if(dragPlayer===null||dragPlayer===pi)return;
-                const src=team.players[dragPlayer],dst=team.players[pi];
-                if(src.active===dst.active){showToast('Arraste titular ↔ reserva');setDragPlayer(null);return;}
-                const outIdx=src.active?dragPlayer:pi,inIdx=src.active?pi:dragPlayer;
-                // Ensure activeTeam matches before subModal
+              data-dragging={dragPlayer===pi&&dragTeam===teamIdx}
+              onClick={()=>{
+                // Se há drag ativo: finaliza substituição
+                if(dragPlayer!==null && dragTeam===teamIdx && dragPlayer!==pi){
+                  const src=team.players[dragPlayer],dst=team.players[pi];
+                  if(src.active!==dst.active){
+                    const outIdx=src.active?dragPlayer:pi,inIdx=src.active?pi:dragPlayer;
+                    setActiveTeam(teamIdx);
+                    setSubModal({reason:null,outIdx,directInIdx:inIdx,canCancel:true});
+                  } else {
+                    showToast('Arraste titular ↔ reserva');
+                  }
+                  setDragPlayer(null); setDragTeam(null);
+                  return;
+                }
+                // Seleção normal
                 setActiveTeam(teamIdx);
-                setSubModal({reason:null,outIdx,directInIdx:inIdx,canCancel:true});
-                setDragPlayer(null);
-              }}>
+                if(teamIdx===0)setSelectedPlayerA(pi); else setSelectedPlayerB(pi);
+              }}
+              onPointerDown={(e)=>{
+                // Inicia long-press para arrastar (funciona em iOS, Android e desktop)
+                e.currentTarget.setPointerCapture(e.pointerId);
+                dragPos.current = { x:e.clientX, y:e.clientY };
+                dragLongPress.current = setTimeout(()=>{
+                  setDragPlayer(pi);
+                  setDragTeam(teamIdx);
+                  showToast('Segure e toque outro jogador para substituir');
+                }, 500);
+              }}
+              onPointerMove={(e)=>{
+                // Cancela long-press se moveu muito
+                const dx=Math.abs(e.clientX-dragPos.current.x);
+                const dy=Math.abs(e.clientY-dragPos.current.y);
+                if(dx>10||dy>10) clearTimeout(dragLongPress.current);
+              }}
+              onPointerUp={()=>{ clearTimeout(dragLongPress.current); }}
+              onPointerCancel={()=>{ clearTimeout(dragLongPress.current); setDragPlayer(null); setDragTeam(null); }}>
               <span className="pnum">#{p.number}</span>
               <span className="pname">{p.name.split(' ')[0]}</span>
               <span className="ppts">{p.pts}p</span>
@@ -1699,16 +1723,12 @@ export default function App() {
 
       {/* Scout */}
       {view==='scout'&&(
-        <main className="scout-view">
-          <div className="team-tabs">
-            {game.teams.map((t,ti)=>(
-              <button key={ti} className="team-tab" data-active={activeTeam===ti}
-                onClick={()=>{setActiveTeam(ti);setSelectedPlayerA(null);setSelectedPlayerB(null);}}>
-                {t.name} <span className="tab-score">{t.score}</span>
-              </button>
-            ))}
-          </div>
-
+        <main className="scout-view" onClick={(e)=>{
+          // If drag is active and click is not on a player button, cancel
+          if(dragPlayer!==null && !e.target.closest('.player-btn')){
+            setDragPlayer(null); setDragTeam(null);
+          }
+        }}>
           <section className="court-section" style={{display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
             <div className="court-section-header">
               <div className="section-label" style={{padding:'8px 0 0'}}>
