@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 // ─── SUBSTITUA AQUI ──────────────────────────────────────────────────────────
-const SUPABASE_URL  = 'https://tpgkhtayyfnntxilwcvu.supabase.co/rest/v1/';   // ← cole sua Project URL
+const SUPABASE_URL  = 'https://tpgkhtayyfnntxilwcvu.supabase.co';   // ← cole sua Project URL
 const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRwZ2todGF5eWZubnR4aWx3Y3Z1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3OTk5MjcsImV4cCI6MjA5MjM3NTkyN30.dTgmf2rUTzS1tThFQszgrLmguDAfo-WofkPYq5fbFrw';                 // ← cole sua anon public key
 // ─────────────────────────────────────────────────────────────────────────────
 
