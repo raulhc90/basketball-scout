@@ -6,8 +6,8 @@ const BASE_QUARTERS = ['1Q', '2Q', '3Q', '4Q'];
 const getQuarterLabel = (q) => q < 4 ? BASE_QUARTERS[q] : `OT${q - 3}`;
 const QUARTERS = BASE_QUARTERS;
 const STORAGE_KEY = 'bball_scout_games';
-const FOUL_DISQUALIFY = 6;
-const FOUL_TROUBLE    = 4;
+const FOUL_DISQUALIFY = 4;   // 4 faltas = eliminação
+const FOUL_TROUBLE    = 3;   // aviso na 3ª falta
 const TEAM_FOUL_BONUS = 5;
 const TECH_DISQUALIFY = 2;
 
@@ -431,7 +431,7 @@ function FoulModal({ player, teamFoulsInQuarter, onType, onCancel }) {
     { id:'tecnica',        label:'Falta Técnica',     desc:'Conduta antidesportiva',  color:'#ef4444', isTech: true  },
     { id:'antidesportiva', label:'Antidesportiva',    desc:'Contato intencional/duro',color:'#be185d', isTech: true  },
     { id:'flagrante',      label:'Flagrante',         desc:'Contato excessivo',       color:'#dc2626', isTech: true  },
-    { id:'ofensiva',       label:'Ofensiva',          desc:'Carrinho / fora da área', color:'#fb923c', isTech: false },
+    { id:'ofensiva',       label:'Ofensiva',          desc:'Carga / Empurrão / Bloqueio ilegal', color:'#fb923c', isTech: false },
   ];
   return (
     <div className="confirm-overlay">
@@ -1819,20 +1819,25 @@ export default function App() {
               <button className="next-q-btn"
                 data-finished={game.quarter>=3&&game.teams[0].score!==game.teams[1].score}
                 onClick={()=>{
+                  // Bloquear se o tempo não acabou
+                  if(game.clock > 0){
+                    const periodName = getQuarterLabel(game.quarter);
+                    const remaining = fmtTime(game.clock);
+                    showToast(`Ainda faltam ${remaining} no ${periodName}`);
+                    return;
+                  }
                   const[s0,s1]=[game.teams[0].score,game.teams[1].score];
-                  // Após 4T: se empatado vai pra OT; se desempatado finaliza
+                  // Após 4T ou qualquer OT: se desempatado finaliza
                   if(game.quarter>=3 && s0!==s1){
                     setGame(g=>({...g,finished:true}));
                     return;
                   }
-                  // Após qualquer OT: só avança se ainda empatado
-                  if(game.quarter>=4 && s0===s1){
-                    nextQuarter();
-                    return;
-                  }
+                  // Empatado: próxima prorrogação
                   nextQuarter();
                 }}>
-                {game.quarter>=3&&game.teams[0].score!==game.teams[1].score?'Finalizar':`›${getQuarterLabel(game.quarter+1)}`}
+                {game.quarter>=3&&game.teams[0].score!==game.teams[1].score
+                  ? (game.clock>0 ? `${fmtTime(game.clock)}` : 'Finalizar')
+                  : (game.clock>0 ? `${fmtTime(game.clock)}` : `›${getQuarterLabel(game.quarter+1)}`)}
               </button>
               <button className="undo-btn-clock" onClick={undoLastAction} title="Desfazer">↩</button>
             </div>
@@ -1903,24 +1908,7 @@ export default function App() {
               {renderTeamPanel(1)}
             </div>
 
-            {/* Stats do atleta selecionado — abaixo da quadra */}
-            {sp&&(
-              <div className="selected-bar below-court">
-                <span className="sel-badge">#{sp.number} {sp.name}</span>
-                <div className="sel-mini-stats">
-                  {[['PTS',sp.pts],['AST',sp.ast],['REB',sp.reb],['RO',sp.oreb],['STL',sp.stl],['BLK',sp.blk],['TO',sp.to]].map(([k,v])=>(
-                    <span key={k} className="mini-stat" data-warn={k==='TO'&&v>2}><b>{v}</b>{k}</span>
-                  ))}
-                  <span className="mini-stat" data-warn={sp.fouls>=FOUL_TROUBLE} data-danger={sp.fouls>=FOUL_DISQUALIFY}>
-                    <b>{sp.fouls}</b>FL
-                  </span>
-                  <span className="mini-stat"><b>{sp.foulsReceived||0}</b>FS</span>
-                  <span className="mini-stat" style={{color:'var(--muted)'}}><b>{sp.possessions||0}</b>POS</span>
-                  <span className="mini-stat" style={{color:sp.plusMinus>0?'var(--green)':sp.plusMinus<0?'var(--red)':''}}><b>{sp.plusMinus>=0?`+${sp.plusMinus}`:sp.plusMinus}</b>+/-</span>
-                </div>
-              </div>
-            )}
-
+            {/* Estatísticas de arremesso — imediatamente abaixo da quadra */}
             {activeShots.length>0&&(()=>{
               const twos  = activeShots.filter(s=>!s.three);
               const threes= activeShots.filter(s=>s.three);
@@ -1957,6 +1945,24 @@ export default function App() {
                 </div>
               );
             })()}
+
+            {/* Stats do atleta — abaixo das estatísticas de arremesso */}
+            {sp&&(
+              <div className="selected-bar below-court">
+                <span className="sel-badge">#{sp.number} {sp.name}</span>
+                <div className="sel-mini-stats">
+                  {[['PTS',sp.pts],['AST',sp.ast],['REB',sp.reb],['RO',sp.oreb],['STL',sp.stl],['BLK',sp.blk],['TO',sp.to]].map(([k,v])=>(
+                    <span key={k} className="mini-stat" data-warn={k==='TO'&&v>2}><b>{v}</b>{k}</span>
+                  ))}
+                  <span className="mini-stat" data-warn={sp.fouls>=FOUL_TROUBLE} data-danger={sp.fouls>=FOUL_DISQUALIFY}>
+                    <b>{sp.fouls}</b>FL
+                  </span>
+                  <span className="mini-stat"><b>{sp.foulsReceived||0}</b>FS</span>
+                  <span className="mini-stat" style={{color:'var(--muted)'}}><b>{sp.possessions||0}</b>POS</span>
+                  <span className="mini-stat" style={{color:sp.plusMinus>0?'var(--green)':sp.plusMinus<0?'var(--red)':''}}><b>{sp.plusMinus>=0?`+${sp.plusMinus}`:sp.plusMinus}</b>+/-</span>
+                </div>
+              </div>
+            )}
           </section>
         </main>
       )}
