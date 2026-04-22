@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
+import { supabase, signIn, signUp, signOut, onAuthChange, fetchGames, upsertGame, deleteGame } from './supabase';
 
 const BASE_QUARTERS = ['1Q', '2Q', '3Q', '4Q'];
 const getQuarterLabel = (q) => q < 4 ? BASE_QUARTERS[q] : `OT${q - 3}`;
@@ -75,8 +76,9 @@ const totals = team => team.players.reduce((acc, p) => {
   return acc;
 }, {});
 
-function loadGames() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; } }
-function saveGames(g) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(g)); } catch {} }
+// localStorage como fallback offline
+function loadGamesLocal() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; } }
+function saveGamesLocal(g) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(g)); } catch {} }
 
 function dl(content, filename) {
   const b = new Blob(['\ufeff'+content], {type:'text/csv;charset=utf-8'});
@@ -728,6 +730,88 @@ function HeatMap({ shots, teamName, attackDir, teamIdx=0 }) {
   );
 }
 
+
+// ─── LoginScreen ──────────────────────────────────────────────────────────────
+function LoginScreen({ onLogin }) {
+  const [mode, setMode]       = useState('login'); // 'login' | 'signup'
+  const [email, setEmail]     = useState('');
+  const [pass, setPass]       = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [error, setError]     = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handle = async () => {
+    setError(''); setLoading(true);
+    try {
+      if (mode === 'signup') {
+        if (pass !== confirm) { setError('As senhas não coincidem.'); setLoading(false); return; }
+        if (pass.length < 6)  { setError('Senha mínima: 6 caracteres.'); setLoading(false); return; }
+        const { error: e } = await signUp(email, pass);
+        if (e) throw e;
+        setError('Confirme seu e-mail antes de entrar.');
+        setMode('login');
+      } else {
+        const { error: e } = await signIn(email, pass);
+        if (e) throw e;
+        // onLogin será chamado pelo onAuthChange listener no App
+      }
+    } catch (e) {
+      const msgs = {
+        'Invalid login credentials': 'E-mail ou senha incorretos.',
+        'Email not confirmed': 'Confirme seu e-mail antes de entrar.',
+        'User already registered': 'E-mail já cadastrado.',
+      };
+      setError(msgs[e.message] || e.message);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="login-screen">
+      <div className="login-box">
+        <div className="login-logo">
+          <svg viewBox="0 0 60 60" width="52" height="52">
+            <circle cx="30" cy="30" r="28" fill="#f97316" stroke="#c2530a" strokeWidth="1"/>
+            <path d="M30 2 Q30 30 30 58" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
+            <path d="M2 30 Q30 30 58 30" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
+            <path d="M8 12 Q20 22 30 30 Q40 38 52 48" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
+            <path d="M52 12 Q40 22 30 30 Q20 38 8 48" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
+          </svg>
+          <div>
+            <div className="login-title">WinFast</div>
+            <div className="login-subtitle">Basketball Scout</div>
+          </div>
+        </div>
+
+        <div className="login-tabs">
+          <button className="login-tab" data-active={mode==='login'} onClick={()=>{setMode('login');setError('');}}>Entrar</button>
+          <button className="login-tab" data-active={mode==='signup'} onClick={()=>{setMode('signup');setError('');}}>Cadastrar</button>
+        </div>
+
+        <div className="login-fields">
+          <input className="login-input" type="email" placeholder="E-mail"
+            value={email} onChange={e=>setEmail(e.target.value)}
+            onKeyDown={e=>e.key==='Enter'&&handle()}/>
+          <input className="login-input" type="password" placeholder="Senha"
+            value={pass} onChange={e=>setPass(e.target.value)}
+            onKeyDown={e=>e.key==='Enter'&&handle()}/>
+          {mode==='signup' && (
+            <input className="login-input" type="password" placeholder="Confirmar senha"
+              value={confirm} onChange={e=>setConfirm(e.target.value)}
+              onKeyDown={e=>e.key==='Enter'&&handle()}/>
+          )}
+        </div>
+
+        {error && <div className="login-error">{error}</div>}
+
+        <button className="login-btn" onClick={handle} disabled={loading||!email||!pass}>
+          {loading ? 'Aguarde...' : mode==='login' ? 'Entrar' : 'Criar conta'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── NewGameModal ─────────────────────────────────────────────────────────────
 const BLANK_PLAYER = () => ({ number: '', name: '' });
 function NewGameModal({ onStart, onClose }) {
@@ -810,8 +894,11 @@ function NewGameModal({ onStart, onClose }) {
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [screen, setScreen] = useState('home');
-  const [games, setGames]   = useState(loadGames);
+  const [screen, setScreen]       = useState('home');
+  const [games, setGames]         = useState(loadGamesLocal);
+  const [user, setUser]           = useState(null);      // usuário autenticado
+  const [authLoading, setAuthLoading] = useState(true);  // aguardando sessão
+  const [syncStatus, setSyncStatus]   = useState('');    // 'syncing' | 'saved' | 'error' | ''
   const [game, setGame]     = useState(null);
   const [running, setRunning] = useState(false);
   const [activeTeam, setActiveTeam] = useState(0);
@@ -886,15 +973,54 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running]);
 
-  // ── Auto-save ───────────────────────────────────────────────────────────────
+  // ── Auth listener ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    // Verifica sessão existente ao iniciar
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null);
+      setAuthLoading(false);
+    });
+    // Escuta mudanças de auth (login/logout)
+    const { data: { subscription } } = onAuthChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // ── Carrega jogos do Supabase quando usuário loga ───────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    fetchGames(user.id)
+      .then(cloudGames => {
+        if (cloudGames.length > 0) {
+          setGames(cloudGames);
+          saveGamesLocal(cloudGames);
+        }
+      })
+      .catch(() => {
+        // fallback: usa localStorage
+        setGames(loadGamesLocal());
+      });
+  }, [user]);
+
+  // ── Auto-save: localStorage + Supabase ──────────────────────────────────────
   useEffect(() => {
     if (!game) return;
     setGames(prev => {
       const idx = prev.findIndex(g => g.id === game.id);
       const next = idx >= 0 ? prev.map((g,i)=>i===idx?game:g) : [game,...prev];
-      saveGames(next); return next;
+      saveGamesLocal(next);
+      // Sync para nuvem se logado
+      if (user) {
+        setSyncStatus('syncing');
+        upsertGame(game, user.id)
+          .then(() => { setSyncStatus('saved'); setTimeout(()=>setSyncStatus(''),2000); })
+          .catch(() => setSyncStatus('error'));
+      }
+      return next;
     });
-  }, [game]);
+  }, [game, user]);
 
   const showToast = msg => { setToast(msg); setTimeout(()=>setToast(null),1800); };
 
@@ -1374,6 +1500,19 @@ export default function App() {
   }, [activeTeam, selectedPlayerA, selectedPlayerB, setGameWithUndo, endPossession]);
 
   // ── Render ──────────────────────────────────────────────────────────────────
+  // Aguardando sessão do Supabase
+  if (authLoading) return (
+    <div className="app" style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh'}}>
+      <div style={{textAlign:'center',color:'var(--muted)',fontFamily:'var(--fd)'}}>
+        <div style={{fontSize:'32px',marginBottom:'8px'}}>⏳</div>
+        <div>Carregando...</div>
+      </div>
+    </div>
+  );
+
+  // Tela de login se não autenticado
+  if (!user) return <LoginScreen onLogin={u => setUser(u)} />;
+
   if (screen === 'home') return (
     <div className="app">
       {showNewGame && <NewGameModal onStart={startGame} onClose={()=>setShowNewGame(false)}/>}
@@ -1391,12 +1530,26 @@ export default function App() {
           <div className="home-title">WinFast Basketball Scout</div>
           <div className="home-sub">Análise ao vivo · Open Source · PWA</div>
         </div>
+        <div className="home-user-bar">
+          <span className="home-user-email">{user.email}</span>
+          <button className="home-logout-btn" onClick={async()=>{await signOut();setUser(null);setGames([]);}}>
+            Sair
+          </button>
+        </div>
         <button className="btn-new-game" onClick={()=>setShowNewGame(true)}>+ Novo Jogo</button>
         {games.length > 0 && (
           <div className="recent-games">
             <div className="recent-label">Jogos Salvos</div>
             {games.slice(0,8).map(g=>(
-              <div key={g.id} className="game-card" onClick={()=>openGame(g)}>
+              <div key={g.id} className="game-card" onClick={()=>openGame(g)}
+                style={{position:'relative'}}>
+                {user && <button className="delete-game-btn" title="Excluir jogo"
+                  onClick={async e=>{
+                    e.stopPropagation();
+                    if(!window.confirm('Excluir este jogo?'))return;
+                    await deleteGame(g.id).catch(()=>{});
+                    setGames(prev=>{const n=prev.filter(x=>x.id!==g.id);saveGamesLocal(n);return n;});
+                  }}>✕</button>}
                 <div className="game-card-teams">
                   <span>{g.teams[0].name}</span>
                   <span className="game-card-score">{g.teams[0].score} — {g.teams[1].score}</span>
@@ -1623,7 +1776,12 @@ export default function App() {
       <header className="header">
         <div className="header-top">
           <button className="back-btn" onClick={()=>{setRunning(false);setScreen('home');}}>‹ Voltar</button>
-          <div className="header-game-label">{game.teams[0].name} vs {game.teams[1].name}</div>
+          <div className="header-game-label">
+            {game.teams[0].name} vs {game.teams[1].name}
+            {syncStatus==='syncing'&&<span className="sync-badge syncing">↑ salvando</span>}
+            {syncStatus==='saved'&&<span className="sync-badge saved">✓ salvo</span>}
+            {syncStatus==='error'&&<span className="sync-badge error">✗ offline</span>}
+          </div>
           <div className="export-btns">
             <button className="export-btn-sm" onClick={()=>exportStatsCSV(game)}>Stats</button>
             <button className="export-btn-sm green" onClick={()=>exportShotsCSV(game)}>Arrem.</button>
