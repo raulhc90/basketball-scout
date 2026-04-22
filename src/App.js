@@ -379,18 +379,14 @@ function AssistModal({ players, scorerIdx, onSelect, onNone, onCancel }) {
   );
 }
 
-// ─── FreeThrowModal ───────────────────────────────────────────────────────────
-function FreeThrowModal({ players, onSelect, onCancel }) {
+// ─── FreeThrowModal: seleciona jogador arremessador ───────────────────────────
+function FreeThrowModal({ players, title, onSelect, onCancel }) {
   return (
-    <div className="assist-overlay">
-      <div className="assist-modal">
-        <div className="assist-modal-header">
-          <span>Lance Livre — quem arremessa?</span>
-          <button className="modal-close" onClick={onCancel}>✕</button>
-        </div>
-        <div className="assist-modal-body">
-          <div className="assist-label">Time em bonificação — selecione o arremessador</div>
-          <div className="assist-players-grid">
+    <div className="confirm-overlay">
+      <div className="confirm-modal" style={{maxWidth:'380px',width:'94%'}}>
+        <div className="confirm-title">{title || 'Lance Livre — quem arremessa?'}</div>
+        <div style={{padding:'0 0 8px'}}>
+          <div className="assist-players-grid" style={{marginTop:'4px'}}>
             {players.filter(p => p.active && p.fouls < FOUL_DISQUALIFY).map((p,i) => (
               <button key={i} className="assist-player-btn" onClick={() => onSelect(players.indexOf(p))}>
                 <span className="assist-pnum">#{p.number}</span>
@@ -400,12 +396,30 @@ function FreeThrowModal({ players, onSelect, onCancel }) {
             ))}
           </div>
         </div>
+        <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
       </div>
     </div>
   );
 }
 
-// ─── FreeThrowResultModal ─────────────────────────────────────────────────────
+// ─── FTQuantityModal: escolhe 2 ou 3 lances ───────────────────────────────────
+function FTQuantityModal({ player, onChoose, onCancel }) {
+  return (
+    <div className="confirm-overlay">
+      <div className="confirm-modal">
+        <div className="confirm-title">Lances Livres</div>
+        <div className="ft-player-label">#{player.number} {player.name.split(' ')[0]}</div>
+        <div className="confirm-btns">
+          <button className="confirm-btn shot-type" onClick={() => onChoose(2)}>2 Lances</button>
+          <button className="confirm-btn shot-type" onClick={() => onChoose(3)}>3 Lances</button>
+        </div>
+        <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── FreeThrowResultModal: resultado de cada lance ────────────────────────────
 function FreeThrowResultModal({ player, attempt, totalAttempts, onMade, onMissed, onCancel }) {
   return (
     <div className="confirm-overlay">
@@ -413,8 +427,60 @@ function FreeThrowResultModal({ player, attempt, totalAttempts, onMade, onMissed
         <div className="confirm-title">Lance Livre {attempt}/{totalAttempts}</div>
         <div className="ft-player-label">#{player.number} {player.name.split(' ')[0]}</div>
         <div className="confirm-btns">
-          <button className="confirm-btn made" onClick={onMade}>Convertido +1</button>
-          <button className="confirm-btn missed" onClick={onMissed}>Errado</button>
+          <button className="confirm-btn made" onClick={onMade}>✓ Convertido</button>
+          <button className="confirm-btn missed" onClick={onMissed}>✕ Errado</button>
+        </div>
+        <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── FTReboundModal: após erro no último LL ───────────────────────────────────
+function FTReboundModal({ attackingPlayers, onOwnRebound, onOpponentRebound, onCancel }) {
+  const [step, setStep] = useState('ask');
+
+  if (step === 'ask') {
+    return (
+      <div className="confirm-overlay">
+        <div className="confirm-modal">
+          <div className="confirm-title">Rebote no LL</div>
+          <div className="confirm-btns">
+            <button className="confirm-btn shot-type"
+              style={{borderColor:'#06b6d4',color:'#06b6d4',background:'rgba(6,182,212,.1)'}}
+              onClick={() => setStep('pick')}>
+              Nosso Time
+            </button>
+            <button className="confirm-btn missed" onClick={onOpponentRebound}>
+              Adversário
+            </button>
+          </div>
+          <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
+        </div>
+      </div>
+    );
+  }
+
+  // Selecionar jogador que pegou o rebote
+  const eligible = attackingPlayers.filter(p => p.active && p.fouls < FOUL_DISQUALIFY);
+  return (
+    <div className="confirm-overlay">
+      <div className="confirm-modal" style={{maxWidth:'380px',width:'94%'}}>
+        <div className="confirm-title">Quem pegou o rebote?</div>
+        <div style={{padding:'0 0 8px'}}>
+          <button className="assist-none-btn" onClick={() => onOwnRebound(null)}>Não identificado</button>
+          <div className="assist-players-grid" style={{marginTop:'8px'}}>
+            {eligible.map((p, i) => {
+              const realIdx = attackingPlayers.indexOf(p);
+              return (
+                <button key={i} className="assist-player-btn" onClick={() => onOwnRebound(realIdx)}>
+                  <span className="assist-pnum">#{p.number}</span>
+                  <span className="assist-pname">{p.name.split(' ')[0]}</span>
+                  <span className="assist-past">{p.oreb}ro</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
         <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
       </div>
@@ -528,21 +594,18 @@ function TurnoverModal({ activeTeamPlayers, onType, onCancel }) {
 // ─── SubModal ─────────────────────────────────────────────────────────────────
 function SubModal({ title, reason, players, outPlayerIdx, onSub, onCancel, canCancel=true }) {
   return (
-    <div className="assist-overlay">
-      <div className="assist-modal">
-        <div className="assist-modal-header">
-          <span>{title}</span>
-          {canCancel && <button className="modal-close" onClick={onCancel}>✕</button>}
-        </div>
-        <div className="assist-modal-body">
-          {reason && <div className="foul-alert warn">{reason}</div>}
+    <div className="confirm-overlay">
+      <div className="confirm-modal" style={{maxWidth:'380px',width:'94%'}}>
+        <div className="confirm-title">{title}</div>
+        <div style={{padding:'0 0 8px'}}>
+          {reason && <div className="foul-alert warn" style={{marginBottom:'8px'}}>{reason}</div>}
           {outPlayerIdx !== null && (
             <div className="sub-out-row">
               <span className="sub-label">Saindo:</span>
               <span className="sub-player-name">#{players[outPlayerIdx]?.number} {players[outPlayerIdx]?.name}</span>
             </div>
           )}
-          <div className="assist-label">Selecione quem entra:</div>
+          <div style={{fontSize:'11px',color:'var(--muted)',fontWeight:700,letterSpacing:'.1em',textTransform:'uppercase',padding:'8px 0 6px',textAlign:'center'}}>Selecione quem entra</div>
           <div className="assist-players-grid">
             {players.map((p,i) => {
               const available = outPlayerIdx !== null
@@ -559,6 +622,7 @@ function SubModal({ title, reason, players, outPlayerIdx, onSub, onCancel, canCa
             })}
           </div>
         </div>
+        {canCancel && <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>}
       </div>
     </div>
   );
@@ -910,8 +974,9 @@ export default function App() {
   const [confirmShot, setConfirmShot]   = useState(null);
   const [assistPending, setAssistPending] = useState(null);
   const [foulPending, setFoulPending]   = useState(false);
-  const [ftModal, setFtModal]           = useState(null);
-  const [ftPlayer, setFtPlayer]         = useState(null);
+  // ftFlow: controla o fluxo completo de lances livres
+  // { step, teamIdx, playerIdx, total, attempt, made[], fromBonus }
+  const [ftFlow, setFtFlow] = useState(null);
   const [subModal, setSubModal]         = useState(null);
   const [dragPlayer, setDragPlayer]     = useState(null);
   const [dragTeam, setDragTeam]         = useState(null);
@@ -1136,10 +1201,12 @@ export default function App() {
     });
 
     setTurnoverPending(false);
-    // Troca time ativo automaticamente
+    const toastType = toType==='roubo' ? 'Roubo' : toType==='infracao' ? 'Infração' : 'Turnover';
+    showToast(`${toastType} — #${game.teams[activeTeam].players[pIdx].number}`);
     setActiveTeam(oppIdx => 1 - oppIdx);
     setSelectedPlayerA(null);
     setSelectedPlayerB(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTeam, selectedPlayerA, selectedPlayerB, setGameWithUndo, endPossession]);
 
   // ── startGame ───────────────────────────────────────────────────────────────
@@ -1302,19 +1369,21 @@ export default function App() {
         : `#${pl.number} ${pl.name.split(' ')[0]} atingiu ${newTechFouls} técnicas — substituição obrigatória`;
       setSubModal({ reason, outIdx: selectedPlayer, canCancel:false });
     } else if (nowBonus) {
-      setFtModal('pick_player');
+      // Bonificação: adversário arremessa 2 LLs — selecionar arremessador
+      setFtFlow({ step:'pick_player', teamIdx: 1 - activeTeam, playerIdx:null, total:2, attempt:1, made:[], fromBonus:true });
     } else if (newFouls >= FOUL_TROUBLE) {
-      showToast(`Foul trouble — ${pl.name.split(' ')[0]} (${newFouls} faltas)`);
+      showToast(`Foul trouble — #${pl.number} ${pl.name.split(' ')[0]} (${newFouls} faltas)`);
+    } else {
+      showToast(`Falta ${foulType} — #${pl.number} ${pl.name.split(' ')[0]}`);
     }
   }, [selectedPlayer, activeTeam, game, setGameWithUndo, endPossession]);
 
-  // ── commitFT ────────────────────────────────────────────────────────────────
+  // ── commitFT: registra um lance livre nas stats (sem lógica de posse) ────────
   const commitFT = useCallback((ftTeamIdx, playerIdx, made) => {
     if (!game) return;
     const pl = game.teams[ftTeamIdx].players[playerIdx];
     const scoringTeam  = ftTeamIdx;
     const opposingTeam = 1 - ftTeamIdx;
-
     setGameWithUndo(g => {
       const teams = g.teams.map((t,ti) => {
         if (ti === scoringTeam) return {
@@ -1335,12 +1404,28 @@ export default function App() {
       });
       const entry = { id:Date.now(), q:getQuarterLabel(g.quarter), time:fmtTime(g.clock),
         team:g.teams[ftTeamIdx].name, player:`#${pl.number} ${pl.name.split(' ')[0]}`,
-        action:made?'LL certo':'LL erro', pts:made?1:0, color:made?'#f59e0b':'#475569' };
-      // Lance livre NÃO conta posse — a posse já foi contada no arremesso que originou a falta
+        action:made?'LL ✓ +1':'LL ✕', pts:made?1:0, color:made?'#f59e0b':'#475569' };
       return { ...g, teams, log:[entry,...g.log] };
     });
     if (made) showToast(`+1 LL — ${pl.name.split(' ')[0]}`);
+    else showToast(`LL erro — ${pl.name.split(' ')[0]}`);
   }, [game, setGameWithUndo]);
+
+  // ── Finaliza sequência de LL com lógica de posse/rebote ──────────────────────
+  const finishFTSequence = useCallback((ftTeamIdx, allMade) => {
+    // allMade: último arremesso convertido → posse adversário, troca seletor
+    // allMade=false: abrir FTReboundModal (gerenciado pelo ftFlow.step='rebound')
+    if (allMade) {
+      setGame(g => endPossession(g, 1 - ftTeamIdx, null));
+      setActiveTeam(1 - ftTeamIdx);
+      setSelectedPlayerA(null);
+      setSelectedPlayerB(null);
+      setFtFlow(null);
+    } else {
+      // Mostrar modal de rebote (step gerenciado externamente)
+      setFtFlow(prev => ({ ...prev, step: 'rebound' }));
+    }
+  }, [endPossession]);
 
   // ── commitShot ──────────────────────────────────────────────────────────────
   // keepPossession=true: arremesso errado mas com rebote ofensivo → não dá posse ao adversário
@@ -1412,7 +1497,7 @@ export default function App() {
   // ── handleCourtClick ────────────────────────────────────────────────────────
   const handleCourtClick = useCallback(e => {
     if (selectedPlayer === null) return;
-    if (confirmShot||assistPending||foulPending||ftModal||subModal) return;
+    if (confirmShot||assistPending||foulPending||ftFlow||subModal||turnoverPending||reboundPending) return;
     if (game?.finished) { showToast('Jogo finalizado'); return; }
     if (!running) { showToast('Inicie o cronômetro para marcar'); return; }
     const rect = e.currentTarget.getBoundingClientRect();
@@ -1422,7 +1507,7 @@ export default function App() {
     const { valid, three, inPaint } = classifyShot(xPct,yPct,dir);
     if (!valid) { showToast('Arremesso no lado errado da quadra'); return; }
     setConfirmShot({ xPct, yPct, three, inPaint });
-  }, [selectedPlayer, confirmShot, assistPending, foulPending, ftModal, subModal, running, activeTeam, game]);
+  }, [selectedPlayer, confirmShot, assistPending, foulPending, ftFlow, subModal, turnoverPending, reboundPending, running, activeTeam, game]);
 
   // ── applyMisc ───────────────────────────────────────────────────────────────
   const applyMisc = useCallback((action, teamIdx = activeTeam) => {
@@ -1438,66 +1523,50 @@ export default function App() {
     }
 
     if (action.id === 'reb') {
-      // Rebote defensivo: posse vai para o time que rebotou + atleta
       setGameWithUndo(g => {
-        const teams = g.teams.map((t,ti) => {
-          if (ti !== teamIdx) return t;
-          return { ...t, players: t.players.map((p,pi) => pi!==pIdx?p:{ ...p, reb:(p.reb||0)+1 }) };
-        });
+        const teams = g.teams.map((t,ti) => ti!==teamIdx?t:{ ...t, players: t.players.map((p,pi) => pi!==pIdx?p:{ ...p, reb:(p.reb||0)+1 }) });
         const pl = g.teams[teamIdx].players[pIdx];
-        const entry = { id:Date.now(), q:getQuarterLabel(g.quarter), time:fmtTime(g.clock),
-          team:g.teams[teamIdx].name, player:`#${pl.number} ${pl.name.split(' ')[0]}`,
-          action:'Rebote', pts:0, color:'#06b6d4' };
+        const entry = { id:Date.now(), q:getQuarterLabel(g.quarter), time:fmtTime(g.clock), team:g.teams[teamIdx].name, player:`#${pl.number} ${pl.name.split(' ')[0]}`, action:'Rebote', pts:0, color:'#06b6d4' };
         return endPossession({ ...g, teams, log:[entry,...g.log] }, teamIdx, pIdx);
       });
+      showToast(`Rebote — #${game.teams[teamIdx].players[pIdx].number}`);
       return;
     }
 
     if (action.id === 'stl') {
-      // Roubo: posse vai para o time que roubou + atleta
       setGameWithUndo(g => {
-        const teams = g.teams.map((t,ti) => {
-          if (ti !== teamIdx) return t;
-          return { ...t, players: t.players.map((p,pi) => pi!==pIdx?p:{ ...p, stl:(p.stl||0)+1 }) };
-        });
+        const teams = g.teams.map((t,ti) => ti!==teamIdx?t:{ ...t, players: t.players.map((p,pi) => pi!==pIdx?p:{ ...p, stl:(p.stl||0)+1 }) });
         const pl = g.teams[teamIdx].players[pIdx];
-        const entry = { id:Date.now(), q:getQuarterLabel(g.quarter), time:fmtTime(g.clock),
-          team:g.teams[teamIdx].name, player:`#${pl.number} ${pl.name.split(' ')[0]}`,
-          action:'Roubo', pts:0, color:'#10b981' };
+        const entry = { id:Date.now(), q:getQuarterLabel(g.quarter), time:fmtTime(g.clock), team:g.teams[teamIdx].name, player:`#${pl.number} ${pl.name.split(' ')[0]}`, action:'Roubo de Bola', pts:0, color:'#10b981' };
         return endPossession({ ...g, teams, log:[entry,...g.log] }, teamIdx, pIdx);
       });
+      showToast(`Roubo — #${game.teams[teamIdx].players[pIdx].number}`);
       return;
     }
 
     if (action.id === 'foulsReceived') {
-      // Falta sofrida: posse vai para quem sofreu + atleta
       setGameWithUndo(g => {
-        const teams = g.teams.map((t,ti) => {
-          if (ti !== teamIdx) return t;
-          return { ...t, players: t.players.map((p,pi) => pi!==pIdx?p:{ ...p, foulsReceived:(p.foulsReceived||0)+1 }) };
-        });
+        const teams = g.teams.map((t,ti) => ti!==teamIdx?t:{ ...t, players: t.players.map((p,pi) => pi!==pIdx?p:{ ...p, foulsReceived:(p.foulsReceived||0)+1 }) });
         const pl = g.teams[teamIdx].players[pIdx];
-        const entry = { id:Date.now(), q:getQuarterLabel(g.quarter), time:fmtTime(g.clock),
-          team:g.teams[teamIdx].name, player:`#${pl.number} ${pl.name.split(' ')[0]}`,
-          action:'Falta Sofrida', pts:0, color:'#c084fc' };
+        const entry = { id:Date.now(), q:getQuarterLabel(g.quarter), time:fmtTime(g.clock), team:g.teams[teamIdx].name, player:`#${pl.number} ${pl.name.split(' ')[0]}`, action:'Falta Sofrida', pts:0, color:'#c084fc' };
         return endPossession({ ...g, teams, log:[entry,...g.log] }, teamIdx, pIdx);
       });
+      showToast(`Falta sofrida — #${game.teams[teamIdx].players[pIdx].number}`);
       return;
     }
 
-    // Ações genéricas (oreb, blk, etc.) — sem mudança de posse
+    // Ações genéricas — com toast
+    const toastLabels = { oreb:'Reb. ofensivo', blk:'Toco', to:'Turnover' };
     setGameWithUndo(g => {
-      const teams = g.teams.map((t,ti) => {
-        if (ti !== teamIdx) return t;
-        return { ...t, players: t.players.map((p,pi) => pi!==pIdx?p:{ ...p, [action.id]:(p[action.id]||0)+1 }) };
-      });
+      const teams = g.teams.map((t,ti) => ti!==teamIdx?t:{ ...t, players: t.players.map((p,pi) => pi!==pIdx?p:{ ...p, [action.id]:(p[action.id]||0)+1 }) });
       const pl = g.teams[teamIdx].players[pIdx];
-      const entry = { id:Date.now(), q:getQuarterLabel(g.quarter), time:fmtTime(g.clock),
-        team:g.teams[teamIdx].name, player:`#${pl.number} ${pl.name.split(' ')[0]}`,
-        action:action.label, pts:0, color:action.color };
+      const entry = { id:Date.now(), q:getQuarterLabel(g.quarter), time:fmtTime(g.clock), team:g.teams[teamIdx].name, player:`#${pl.number} ${pl.name.split(' ')[0]}`, action:action.label, pts:0, color:action.color };
       return { ...g, teams, log:[entry,...g.log] };
     });
-  }, [activeTeam, selectedPlayerA, selectedPlayerB, setGameWithUndo, endPossession]);
+    const pl = game.teams[teamIdx].players[pIdx];
+    showToast(`${toastLabels[action.id]||action.label} — #${pl.number} ${pl.name.split(' ')[0]}`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTeam, selectedPlayerA, selectedPlayerB, setGameWithUndo, endPossession, game]);
 
   // ── Render ──────────────────────────────────────────────────────────────────
   // Aguardando sessão do Supabase
@@ -1647,12 +1716,10 @@ export default function App() {
             <div className="actions-row">
               <button className="action-btn" style={{'--ac':'#f59e0b'}} onClick={()=>{
                 if(pIdx===null){showToast('Selecione um atleta');return;}
-                setActiveTeam(teamIdx); commitFT(teamIdx,pIdx,true);
-              }}>LL ✔</button>
-              <button className="action-btn" style={{'--ac':'#64748b'}} onClick={()=>{
-                if(pIdx===null){showToast('Selecione um atleta');return;}
-                setActiveTeam(teamIdx); commitFT(teamIdx,pIdx,false);
-              }}>LL ✖</button>
+                setActiveTeam(teamIdx);
+                // Abre fluxo: sabe o jogador, pede a quantidade
+                setFtFlow({ step:'pick_quantity', teamIdx, playerIdx:pIdx, total:0, attempt:1, made:[], fromBonus:false });
+              }}>Lance Livre</button>
             </div>
           </div>
           <div className="actions-group">
@@ -1739,19 +1806,86 @@ export default function App() {
           onCancel={() => setReboundPending(null)}
         />
       )}
-      {ftModal==='pick_player' && (()=>{
-        const ftTeamIdx = 1-activeTeam;
-        return <FreeThrowModal players={game.teams[ftTeamIdx].players}
-          onSelect={idx=>{setFtPlayer({teamIdx:ftTeamIdx,playerIdx:idx,attempt:1,total:2});setFtModal('result');}}
-          onCancel={()=>setFtModal(null)}/>;
+      {/* ── Fluxo completo de Lance Livre ── */}
+      {ftFlow?.step==='pick_player' && (
+        <FreeThrowModal
+          players={game.teams[ftFlow.teamIdx].players}
+          title={ftFlow.fromBonus ? 'Bonificação — quem arremessa?' : 'Lance Livre — quem arremessa?'}
+          onSelect={idx => setFtFlow(f => ({...f, step:'pick_quantity', playerIdx:idx}))}
+          onCancel={() => setFtFlow(null)}
+        />
+      )}
+      {ftFlow?.step==='pick_quantity' && ftFlow.playerIdx !== null && (
+        <FTQuantityModal
+          player={game.teams[ftFlow.teamIdx].players[ftFlow.playerIdx]}
+          onChoose={n => setFtFlow(f => ({...f, total:n, attempt:1, step:'result'}))}
+          onCancel={() => setFtFlow(null)}
+        />
+      )}
+      {ftFlow?.step==='result' && ftFlow.playerIdx !== null && (()=>{
+        const pl = game.teams[ftFlow.teamIdx].players[ftFlow.playerIdx];
+        const isLast = ftFlow.attempt === ftFlow.total;
+        return (
+          <FreeThrowResultModal
+            player={pl}
+            attempt={ftFlow.attempt}
+            totalAttempts={ftFlow.total}
+            onMade={() => {
+              commitFT(ftFlow.teamIdx, ftFlow.playerIdx, true);
+              if (!isLast) {
+                setFtFlow(f => ({...f, attempt: f.attempt+1, made:[...f.made, true]}));
+              } else {
+                // Último LL convertido → posse adversário, troca seletor
+                finishFTSequence(ftFlow.teamIdx, true);
+              }
+            }}
+            onMissed={() => {
+              commitFT(ftFlow.teamIdx, ftFlow.playerIdx, false);
+              if (!isLast) {
+                setFtFlow(f => ({...f, attempt: f.attempt+1, made:[...f.made, false]}));
+              } else {
+                // Último LL errado → abre modal de rebote
+                finishFTSequence(ftFlow.teamIdx, false);
+              }
+            }}
+            onCancel={() => setFtFlow(null)}
+          />
+        );
       })()}
-      {ftModal==='result' && ftPlayer!==null && (
-        <FreeThrowResultModal
-          player={game.teams[ftPlayer.teamIdx].players[ftPlayer.playerIdx]}
-          attempt={ftPlayer.attempt} totalAttempts={ftPlayer.total}
-          onMade={()=>{ commitFT(ftPlayer.teamIdx,ftPlayer.playerIdx,true); if(ftPlayer.attempt<ftPlayer.total)setFtPlayer(p=>({...p,attempt:p.attempt+1}));else{setFtModal(null);setFtPlayer(null);} }}
-          onMissed={()=>{ commitFT(ftPlayer.teamIdx,ftPlayer.playerIdx,false); if(ftPlayer.attempt<ftPlayer.total)setFtPlayer(p=>({...p,attempt:p.attempt+1}));else{setFtModal(null);setFtPlayer(null);} }}
-          onCancel={()=>{setFtModal(null);setFtPlayer(null);}}
+      {ftFlow?.step==='rebound' && (
+        <FTReboundModal
+          attackingPlayers={game.teams[ftFlow.teamIdx].players}
+          onOwnRebound={(rebIdx) => {
+            // Nosso time pegou o rebote: soma posse pro time do LL, mantém seletor
+            setGame(g => {
+              let updated = endPossession(g, ftFlow.teamIdx, null);
+              if (rebIdx !== null) {
+                const teams = updated.teams.map((t,ti) => ti!==ftFlow.teamIdx ? t : ({
+                  ...t, players: t.players.map((p,pi) =>
+                    pi===rebIdx ? {...p, oreb:(p.oreb||0)+1} : p)
+                }));
+                const rp = updated.teams[ftFlow.teamIdx].players[rebIdx];
+                const entry = {id:Date.now(),q:getQuarterLabel(updated.quarter),time:fmtTime(updated.clock),
+                  team:updated.teams[ftFlow.teamIdx].name,player:`#${rp.number} ${rp.name.split(' ')[0]}`,
+                  action:'Reb. LL',pts:0,color:'#0891b2'};
+                updated = {...updated, teams, log:[entry,...updated.log]};
+              }
+              return updated;
+            });
+            showToast('Rebote LL — segue posse');
+            setFtFlow(null);
+          }}
+          onOpponentRebound={() => {
+            // Adversário pegou: posse + seletor pro adversário
+            const opp = 1 - ftFlow.teamIdx;
+            setGame(g => endPossession(g, opp, null));
+            setActiveTeam(opp);
+            setSelectedPlayerA(null);
+            setSelectedPlayerB(null);
+            showToast('Rebote adversário — posse trocada');
+            setFtFlow(null);
+          }}
+          onCancel={() => setFtFlow(null)}
         />
       )}
       {subModal&&subModal.directInIdx!==undefined&&(
