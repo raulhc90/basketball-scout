@@ -927,7 +927,7 @@ function LoginScreen({ onLogin }) {
 
 
 // ─── TeamsScreen ──────────────────────────────────────────────────────────────
-function TeamsScreen({ teams, onSave, onClose }) {
+function TeamsScreen({ teams, onSave, syncStatus, onClose }) {
   const [list, setList]       = useState(teams.map(t => ({ ...t, players: t.players.map(p => ({ ...p })) })));
   const [editing, setEditing] = useState(null); // idx do time sendo editado
   const [newName, setNewName] = useState('');
@@ -1022,8 +1022,33 @@ function TeamsScreen({ teams, onSave, onClose }) {
             </div>
           )}
         </div>
-        <div className="modal-footer">
-          <button className="btn-start" onClick={() => { onSave(list); onClose(); }}>Salvar Times</button>
+        <div className="modal-footer" style={{flexDirection:'column',gap:'8px'}}>
+          {/* Status de sincronização */}
+          {syncStatus === 'pending' && (
+            <div className="teams-sync-banner pending">
+              ⚠️ Alterações salvas localmente mas <b>não sincronizadas com a nuvem</b>.
+              Conecte-se a uma rede com acesso ao Supabase e clique em Salvar novamente.
+            </div>
+          )}
+          {syncStatus === 'syncing' && (
+            <div className="teams-sync-banner syncing">↑ Salvando na nuvem...</div>
+          )}
+          {syncStatus === 'saved' && (
+            <div className="teams-sync-banner saved">✓ Times salvos na nuvem com sucesso.</div>
+          )}
+          {syncStatus === 'error' && (
+            <div className="teams-sync-banner error">✗ Erro ao salvar na nuvem. Tente novamente.</div>
+          )}
+          <div style={{display:'flex',gap:'8px',width:'100%'}}>
+            <button className="btn-start" style={{flex:1}}
+              onClick={() => { onSave(list); onClose(); }}>
+              Salvar e Fechar
+            </button>
+            <button className="btn-start" style={{flex:1,background:'var(--bg3)',color:'var(--text)',border:'1px solid var(--border)'}}
+              onClick={() => onSave(list)}>
+              {syncStatus==='syncing' ? '↑ Salvando...' : '↑ Salvar na Nuvem'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1197,7 +1222,8 @@ export default function App() {
   const [savedTeams, setSavedTeams]   = useState(() => {
     try { return JSON.parse(localStorage.getItem('wf_teams')||'[]'); } catch { return []; }
   });
-  const [showTeams, setShowTeams] = useState(false); // tela de gerenciar times
+  const [showTeams, setShowTeams]         = useState(false);
+  const [teamsSyncStatus, setTeamsSyncStatus] = useState(''); // ''|'syncing'|'saved'|'pending'|'error'
   const [game, setGame]     = useState(null);
   const [running, setRunning] = useState(false);
   const [activeTeam, setActiveTeam] = useState(0);
@@ -1307,9 +1333,14 @@ export default function App() {
         if (cloudTeams.length > 0) {
           setSavedTeams(cloudTeams);
           localStorage.setItem('wf_teams', JSON.stringify(cloudTeams));
+          setTeamsSyncStatus('saved');
         }
       })
-      .catch(() => {}); // silencioso — usa localStorage
+      .catch(() => {
+        // Sem conexão: times locais podem estar pendentes
+        const local = JSON.parse(localStorage.getItem('wf_teams')||'[]');
+        if (local.length > 0) setTeamsSyncStatus('pending');
+      });
   }, [user]);
 
   // ── Auto-save: localStorage + Supabase com debounce ────────────────────────
@@ -1342,17 +1373,34 @@ export default function App() {
   const saveTeams = (teams) => {
     setSavedTeams(teams);
     localStorage.setItem('wf_teams', JSON.stringify(teams));
-    // Sincronizar com Supabase se logado
-    if (user) {
-      teams.forEach(t => upsertTeam(t, user.id).catch(() => {}));
-      // Remover times deletados: buscar IDs atuais no banco e deletar os que não estão mais
-      fetchTeams(user.id).then(cloudTeams => {
-        const localIds = new Set(teams.map(t => t.id));
-        cloudTeams.forEach(ct => {
-          if (!localIds.has(ct.id)) deleteTeam(ct.id).catch(() => {});
-        });
-      }).catch(() => {});
+
+    if (!user) {
+      // Não logado: marca como pendente
+      setTeamsSyncStatus('pending');
+      return;
     }
+
+    setTeamsSyncStatus('syncing');
+
+    // Upsert todos os times e deletar os removidos
+    Promise.all(teams.map(t => upsertTeam(t, user.id)))
+      .then(() => fetchTeams(user.id))
+      .then(cloudTeams => {
+        const localIds = new Set(teams.map(t => t.id));
+        return Promise.all(
+          cloudTeams
+            .filter(ct => !localIds.has(ct.id))
+            .map(ct => deleteTeam(ct.id).catch(() => {}))
+        );
+      })
+      .then(() => {
+        setTeamsSyncStatus('saved');
+        setTimeout(() => setTeamsSyncStatus(''), 4000);
+      })
+      .catch(() => {
+        // Falhou: marca como pendente para o usuário saber
+        setTeamsSyncStatus('pending');
+      });
   };
 
   // ── Posse: incrementa possessions respeitando regra da 1ª posse ──────────
@@ -1905,7 +1953,7 @@ export default function App() {
   if (screen === 'home') return (
     <div className="app">
       {showNewGame && <NewGameModal onStart={startGame} onClose={()=>setShowNewGame(false)} savedTeams={savedTeams}/>}
-      {showTeams && <TeamsScreen teams={savedTeams} onSave={saveTeams} onClose={()=>setShowTeams(false)}/>}
+      {showTeams && <TeamsScreen teams={savedTeams} onSave={saveTeams} syncStatus={teamsSyncStatus} onClose={()=>setShowTeams(false)}/>}
       <div className="home-screen">
         <div className="home-logo">
           <div className="logo-ball">
@@ -1928,12 +1976,18 @@ export default function App() {
         </div>
         <div style={{display:'flex',gap:'10px',width:'100%',maxWidth:'360px'}}>
           <button className="btn-new-game" style={{flex:2}} onClick={()=>setShowNewGame(true)}>+ Novo Jogo</button>
-          <button className="btn-teams" onClick={()=>setShowTeams(true)}>⚑ Meus Times</button>
+          <button className="btn-teams" onClick={()=>setShowTeams(true)}>
+            ⚑ Meus Times
+            {teamsSyncStatus==='pending' && <span className="teams-sync-dot pending" title="Times com alterações não salvas na nuvem">●</span>}
+            {teamsSyncStatus==='syncing' && <span className="teams-sync-dot syncing" title="Salvando na nuvem...">↑</span>}
+            {teamsSyncStatus==='saved'   && <span className="teams-sync-dot saved"   title="Salvo na nuvem">✓</span>}
+            {teamsSyncStatus==='error'   && <span className="teams-sync-dot error"   title="Erro ao salvar">✗</span>}
+          </button>
         </div>
         <div style={{display:'flex',gap:'10px',width:'100%',maxWidth:'360px'}}>
           {/* Botão importar JSON */}
           <label className="btn-import" title="Importar jogo de arquivo JSON">
-            ↑ Importar Jogo Completo
+            ↑ Importar JSON
             <input type="file" accept=".json" style={{display:'none'}}
               onChange={e => {
                 const file = e.target.files?.[0];
