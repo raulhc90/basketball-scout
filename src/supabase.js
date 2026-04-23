@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 // ─── SUBSTITUA AQUI ──────────────────────────────────────────────────────────
-const SUPABASE_URL  = 'https://tpgkhtayyfnntxilwcvu.supabase.co';   // ← cole sua Project URL
-const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRwZ2todGF5eWZubnR4aWx3Y3Z1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3OTk5MjcsImV4cCI6MjA5MjM3NTkyN30.dTgmf2rUTzS1tThFQszgrLmguDAfo-WofkPYq5fbFrw';                 // ← cole sua anon public key
+const SUPABASE_URL  = 'https://SEU_PROJETO.supabase.co';   // ← cole sua Project URL
+const SUPABASE_KEY  = 'eyJSUA_CHAVE_AQUI';                 // ← cole sua anon public key
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Cria o cliente com persistência de sessão explícita
@@ -69,4 +69,41 @@ export async function deleteGame(gameId) {
     console.error('deleteGame error:', error.message);
     throw error;
   }
+}
+
+// ── Teams CRUD ────────────────────────────────────────────────────────────────
+export async function fetchTeams(userId) {
+  const { data, error } = await supabase
+    .from('teams')
+    .select('id, name, players')
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false });
+  if (error) {
+    // Tabela pode não existir ainda — retorna vazio sem quebrar
+    console.warn('fetchTeams:', error.message);
+    return [];
+  }
+  return data;
+}
+
+export async function upsertTeam(team, userId) {
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session) return;
+  const { error } = await supabase
+    .from('teams')
+    .upsert({
+      id: team.id,
+      user_id: userId,
+      name: team.name,
+      players: team.players,
+    }, { onConflict: 'id' });
+  if (error) console.error('upsertTeam error:', error.message);
+}
+
+export async function deleteTeam(teamId) {
+  const { error } = await supabase
+    .from('teams')
+    .delete()
+    .eq('id', teamId);
+  if (error) console.error('deleteTeam error:', error.message);
 }

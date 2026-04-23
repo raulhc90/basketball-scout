@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
-import { supabase, signIn, signUp, signOut, onAuthChange, fetchGames, upsertGame, deleteGame } from './supabase';
+import { supabase, signIn, signUp, signOut, onAuthChange, fetchGames, upsertGame, deleteGame, fetchTeams, upsertTeam, deleteTeam } from './supabase';
 
 const BASE_QUARTERS = ['1Q', '2Q', '3Q', '4Q'];
 const getQuarterLabel = (q) => q < 4 ? BASE_QUARTERS[q] : `OT${q - 3}`;
@@ -640,7 +640,7 @@ function SubModal({ title, reason, players, outPlayerIdx, onSub, onCancel, canCa
 }
 
 // ─── HeatMap ──────────────────────────────────────────────────────────────────
-function HeatMap({ shots, teamName, attackDir, teamIdx=0 }) {
+function HeatMap({ shots, teamName, attackDir, teamIdx=0, homeAttackRight=true }) {
   const W = 600, H = 320, cy = 160;
   const RADIUS = 38;
   const clusters = [];
@@ -690,37 +690,30 @@ function HeatMap({ shots, teamName, attackDir, teamIdx=0 }) {
           return <circle key={i} cx={cl.cx} cy={cl.cy} r={r} fill={`url(#hg${i})`}/>;
         })}
 
-        {/* Destaque de zona de ataque por período */}
+        {/* Destaque de zona de ataque por período — usa homeAttackRight */}
         {(()=>{
-          // Q1/Q2: time 0 ataca direita (x>300), time 1 ataca esquerda (x<300)
-          // Q3/Q4: lados invertidos
-          // Mostra overlay sutil: 1º tempo = left half, 2º tempo = right half (ou vice-versa)
           const halfW = W/2;
-          // Q1/Q2 attack zone for this team
-          const q12dir = teamIdx === 0 ? 'right' : 'left';
-          // Q3/Q4 attack zone (inverted)
-          const q34dir = teamIdx === 0 ? 'left' : 'right';
+          // 1º tempo: Q0/Q1 — usa getAttackDir com quarter=0
+          const q12dir = getAttackDir(teamIdx, 0, homeAttackRight);
+          // 2º tempo: Q2/Q3 — usa getAttackDir com quarter=2 (lados invertidos)
+          const q34dir = getAttackDir(teamIdx, 2, homeAttackRight);
           return (<>
-            {/* 1º Tempo — label */}
-            <text x={q12dir==='right'? W*0.75 : W*0.25} y="14"
-              fill="rgba(250,233,42,0.55)" fontSize="9" fontFamily="sans-serif"
-              fontWeight="bold" textAnchor="middle" letterSpacing="1">1º TEMPO</text>
+            {/* Tint 1º tempo */}
+            <rect x={q12dir==='right'? halfW : 0} y={0} width={halfW} height={H}
+              fill="rgba(250,233,42,0.04)" pointerEvents="none"/>
+            {/* Tint 2º tempo */}
+            <rect x={q34dir==='right'? halfW : 0} y={0} width={halfW} height={H}
+              fill="rgba(59,130,246,0.04)" pointerEvents="none"/>
+            {/* Linha divisória */}
             <line x1={halfW} y1="2" x2={halfW} y2={H-2}
-              stroke="rgba(250,233,42,0.3)" strokeWidth="2" strokeDasharray="6 4"/>
-            {/* 2º Tempo — label */}
-            <text x={q34dir==='right'? W*0.75 : W*0.25} y="14"
-              fill="rgba(59,130,246,0.55)" fontSize="9" fontFamily="sans-serif"
+              stroke="rgba(250,233,42,0.35)" strokeWidth="1.5" strokeDasharray="6 4"/>
+            {/* Labels */}
+            <text x={q12dir==='right'? W*0.75 : W*0.25} y="13"
+              fill="rgba(250,233,42,0.7)" fontSize="8" fontFamily="sans-serif"
+              fontWeight="bold" textAnchor="middle" letterSpacing="1">1º TEMPO</text>
+            <text x={q34dir==='right'? W*0.75 : W*0.25} y="13"
+              fill="rgba(59,130,246,0.7)" fontSize="8" fontFamily="sans-serif"
               fontWeight="bold" textAnchor="middle" letterSpacing="1">2º TEMPO</text>
-            {/* Tint sutil no lado de ataque do 1º tempo */}
-            <rect
-              x={q12dir==='right'? halfW : 0} y={0}
-              width={halfW} height={H}
-              fill="rgba(250,233,42,0.03)" pointerEvents="none"/>
-            {/* Tint sutil no lado de ataque do 2º tempo */}
-            <rect
-              x={q34dir==='right'? halfW : 0} y={0}
-              width={halfW} height={H}
-              fill="rgba(59,130,246,0.03)" pointerEvents="none"/>
           </>);
         })()}
 
@@ -1251,9 +1244,10 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // ── Carrega jogos do Supabase quando usuário loga ───────────────────────────
+  // ── Carrega jogos e times do Supabase quando usuário loga ──────────────────
   useEffect(() => {
     if (!user) return;
+    // Jogos
     fetchGames(user.id)
       .then(cloudGames => {
         if (cloudGames.length > 0) {
@@ -1261,10 +1255,16 @@ export default function App() {
           saveGamesLocal(cloudGames);
         }
       })
-      .catch(() => {
-        // fallback: usa localStorage
-        setGames(loadGamesLocal());
-      });
+      .catch(() => setGames(loadGamesLocal()));
+    // Times
+    fetchTeams(user.id)
+      .then(cloudTeams => {
+        if (cloudTeams.length > 0) {
+          setSavedTeams(cloudTeams);
+          localStorage.setItem('wf_teams', JSON.stringify(cloudTeams));
+        }
+      })
+      .catch(() => {}); // silencioso — usa localStorage
   }, [user]);
 
   // ── Auto-save: localStorage + Supabase com debounce ────────────────────────
@@ -1297,6 +1297,17 @@ export default function App() {
   const saveTeams = (teams) => {
     setSavedTeams(teams);
     localStorage.setItem('wf_teams', JSON.stringify(teams));
+    // Sincronizar com Supabase se logado
+    if (user) {
+      teams.forEach(t => upsertTeam(t, user.id).catch(() => {}));
+      // Remover times deletados: buscar IDs atuais no banco e deletar os que não estão mais
+      fetchTeams(user.id).then(cloudTeams => {
+        const localIds = new Set(teams.map(t => t.id));
+        cloudTeams.forEach(ct => {
+          if (!localIds.has(ct.id)) deleteTeam(ct.id).catch(() => {});
+        });
+      }).catch(() => {});
+    }
   };
 
   // ── Posse: incrementa possessions respeitando regra da 1ª posse ──────────
@@ -2438,8 +2449,10 @@ export default function App() {
         <main className="heatmap-view">
           {game.teams.map((team,ti)=>(
             <HeatMap key={ti} shots={team.players.flatMap(p=>p.shots||[])}
-              teamName={team.name} attackDir={getAttackDir(ti, game.quarter)}
-              teamIdx={ti}/>
+              teamName={team.name}
+              attackDir={getAttackDir(ti, game.quarter, game.homeAttackRight ?? true)}
+              teamIdx={ti}
+              homeAttackRight={game.homeAttackRight ?? true}/>
           ))}
         </main>
       )}
