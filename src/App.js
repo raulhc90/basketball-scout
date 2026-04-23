@@ -69,7 +69,7 @@ const MISC_ACTIONS = [
 ];
 
 const fmtTime = s => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
-const pct = (m,a) => { if (!a || a===0) return '—'; return `${Math.round(m/a*100)}%`; };
+const pct = (m,a) => { if (!a || a===0) return ''; return `${Math.round(m/a*100)}%`; };
 const totals = team => team.players.reduce((acc, p) => {
   ['pts','ast','reb','oreb','stl','blk','to','fg2m','fg2a','fg3m','fg3a','ftm','fta','fouls','foulsReceived','possessions']
     .forEach(k => acc[k] = (acc[k]||0) + (p[k]||0));
@@ -88,16 +88,16 @@ function dl(content, filename) {
 function exportStatsCSV(game) {
   const d = game.gameDate || game.date || '';
   const matchup = `${game.teams[0].name} vs ${game.teams[1].name}`;
-  const lines = [`Data,Jogo,Atleta,Time,MIN,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG%,FG3M,FG3A,3P%,FTM,FTA,LL%,FALTAS,FALTAS.SOF,+/-,PIR,POSSES.ATL`];
+  const lines = [`Data,Jogo,Numero,Atleta,Time,MIN,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG%,FG3M,FG3A,3P%,FTM,FTA,LL%,FALTAS,FALTAS.SOF,+/-,PIR,POSSES.ATL`];
   game.teams.forEach((t, ti) => {
     t.players.forEach(p => {
       const pm = (p.plusMinus||0) >= 0 ? `+${p.plusMinus||0}` : `${p.plusMinus||0}`;
       const min = `${Math.floor((p.timeOnCourt||0)/60)}:${String(Math.round((p.timeOnCourt||0)%60)).padStart(2,'0')}`;
-      lines.push(`"${d}","${matchup}","#${p.number} ${p.name}","${t.name}",${min},${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${p.fg3m},${p.fg3a},${pct(p.fg3m,p.fg3a)},${p.ftm},${p.fta},${pct(p.ftm,p.fta)},${p.fouls},${p.foulsReceived||0},${pm},${calcPIR(p)},${p.possessions||0}`);
+      lines.push(`"${d}","${matchup}","${p.number}","${p.name}","${t.name}",${min},${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${p.fg3m},${p.fg3a},${pct(p.fg3m,p.fg3a)},${p.ftm},${p.fta},${pct(p.ftm,p.fta)},${p.fouls},${p.foulsReceived||0},${pm},${calcPIR(p)},${p.possessions||0}`);
     });
     const tot = totals(t);
     const teamPoss = (game.possessions||[0,0])[ti]||0;
-    lines.push(`"${d}","${matchup}","TOTAL","${t.name}",,${tot.pts},${tot.ast},${tot.reb},${tot.oreb},${tot.stl},${tot.blk},${tot.to},${tot.fg2m},${tot.fg2a},${pct(tot.fg2m+tot.fg3m,tot.fg2a+tot.fg3a)},${tot.fg3m},${tot.fg3a},${pct(tot.fg3m,tot.fg3a)},${tot.ftm},${tot.fta},${pct(tot.ftm,tot.fta)},${tot.fouls},,,,${teamPoss} (time) / ${tot.possessions||0} (atletas)`);
+    lines.push(`"${d}","${matchup}","","TOTAL","${t.name}",,${tot.pts},${tot.ast},${tot.reb},${tot.oreb},${tot.stl},${tot.blk},${tot.to},${tot.fg2m},${tot.fg2a},${pct(tot.fg2m+tot.fg3m,tot.fg2a+tot.fg3a)},${tot.fg3m},${tot.fg3a},${pct(tot.fg3m,tot.fg3a)},${tot.ftm},${tot.fta},${pct(tot.ftm,tot.fta)},${tot.fouls},,,,${teamPoss}`);
   });
   dl(lines.join('\n'), `stats_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
@@ -105,9 +105,13 @@ function exportStatsCSV(game) {
 function exportLogCSV(game) {
   const d = game.gameDate || game.date || '';
   const matchup = `${game.teams[0].name} vs ${game.teams[1].name}`;
-  const lines = ['Data,Jogo,Quarto,Tempo,Time,Atleta,Acao,Pontos'];
+  const lines = ['Data,Jogo,Quarto,Tempo,Time,Numero,Atleta,Acao,Pontos'];
   game.log.forEach(e => {
-    lines.push(`"${d}","${matchup}","${e.q}","${e.time}","${e.team}","${e.player}","${e.action}",${e.pts}`);
+    // Separa "#07 Costa" em numero="07" e nome="Costa"
+    const playerParts = (e.player||'').match(/^#?([\w]+)\s+(.+)$/);
+    const pNum  = playerParts ? playerParts[1] : '';
+    const pName = playerParts ? playerParts[2] : (e.player||'');
+    lines.push(`"${d}","${matchup}","${e.q}","${e.time}","${e.team}","${pNum}","${pName}","${e.action}",${e.pts}`);
   });
   dl(lines.join('\n'), `log_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
@@ -115,11 +119,11 @@ function exportLogCSV(game) {
 function exportShotsCSV(game) {
   const d = game.gameDate || game.date || '';
   const matchup = `${game.teams[0].name} vs ${game.teams[1].name}`;
-  const lines = ['Data,Jogo,Atleta,Time,Quarto,Tempo,X_pct,Y_pct,Convertido,Zona,Subtipo,Assistencia'];
+  const lines = ['Data,Jogo,Numero,Atleta,Time,Quarto,Tempo,X_pct,Y_pct,Convertido,Zona,Subtipo,Assistencia'];
   game.teams.forEach(t => t.players.forEach(p =>
     (p.shots||[]).forEach(s => {
       const subtipo = s.three ? 'Arremesso' : (s.shotType && s.shotType !== '3pts' ? s.shotType : 'Arremesso');
-      lines.push(`"${d}","${matchup}","#${p.number} ${p.name}","${t.name}","${s.q||''}","${s.time||''}",${s.x.toFixed(2)},${s.y.toFixed(2)},${s.made?'Sim':'Não'},${s.three?'3pts':'2pts'},"${subtipo}","${s.assistedBy||''}"`);
+      lines.push(`"${d}","${matchup}","${p.number}","${p.name}","${t.name}","${s.q||''}","${s.time||''}",${s.x.toFixed(2)},${s.y.toFixed(2)},${s.made?'Sim':'Não'},${s.three?'3pts':'2pts'},"${subtipo}","${s.assistedBy||''}"`);
     })));
   dl(lines.join('\n'), `arremessos_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
@@ -793,8 +797,8 @@ function HeatMap({ shots, teamName, attackDir, teamIdx=0 }) {
       <div className="heatmap-legend">
         <span className="hml-item" style={{color:'#22c55e'}}>● Convertido ({shots.filter(s=>s.made).length})</span>
         <span className="hml-item" style={{color:'#ef4444'}}>✕ Errado ({shots.filter(s=>!s.made).length})</span>
-        <span className="hml-item" style={{color:'#f97316'}}>FG: {shots.length>0?Math.round(shots.filter(s=>s.made).length/shots.length*100)+'%':'—'}</span>
-        <span className="hml-item" style={{color:'#3b82f6'}}>3P: {(()=>{const t=shots.filter(s=>s.three);return t.length>0?Math.round(t.filter(s=>s.made).length/t.length*100)+'%':'—';})()}</span>
+        <span className="hml-item" style={{color:'#f97316'}}>FG: {shots.length>0?Math.round(shots.filter(s=>s.made).length/shots.length*100)+'%':''}</span>
+        <span className="hml-item" style={{color:'#3b82f6'}}>3P: {(()=>{const t=shots.filter(s=>s.three);return t.length>0?Math.round(t.filter(s=>s.made).length/t.length*100)+'%':'';})()}</span>
       </div>
     </div>
   );
@@ -1827,6 +1831,9 @@ export default function App() {
                   action: 'Reb. Ofensivo', pts: 0, color: '#0891b2' };
                 return { ...g, teams, log: [entry, ...g.log] };
               });
+              // Troca seletor para o jogador que pegou o rebote
+              if (activeTeam === 0) setSelectedPlayerA(rebPlayerIdx);
+              else setSelectedPlayerB(rebPlayerIdx);
             }
             setReboundPending(null);
           }}
@@ -2214,7 +2221,7 @@ export default function App() {
                         ))}
                       </tbody>
                       <tfoot><tr>
-                        <td>Time</td><td className="min-cell">—</td>
+                        <td>Time</td><td className="min-cell"></td>
                         <td style={{fontWeight:600}}>{tot.possessions||0}</td>
                         <td className="pts-cell">{tot.pts}</td>
                         <td>{tot.ast}</td><td>{tot.reb}</td><td>{tot.oreb}</td>
