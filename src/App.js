@@ -6,8 +6,8 @@ const BASE_QUARTERS = ['1Q', '2Q', '3Q', '4Q'];
 const getQuarterLabel = (q) => q < 4 ? BASE_QUARTERS[q] : `OT${q - 3}`;
 const QUARTERS = BASE_QUARTERS;
 const STORAGE_KEY = 'bball_scout_games';
-const FOUL_DISQUALIFY = 4;   // 4 faltas = eliminação
-const FOUL_TROUBLE    = 3;   // aviso na 3ª falta
+const FOUL_DISQUALIFY = 5;   // 5 faltas = eliminação (FIBA/NBB)
+const FOUL_TROUBLE    = 4;   // aviso na 4ª falta (uma antes da eliminação)
 const TEAM_FOUL_BONUS = 5;
 const TECH_DISQUALIFY = 2;
 
@@ -413,16 +413,19 @@ function FreeThrowModal({ players, title, onSelect, onCancel }) {
   );
 }
 
-// ─── FTQuantityModal: escolhe 2 ou 3 lances ───────────────────────────────────
-function FTQuantityModal({ player, onChoose, onCancel }) {
+// ─── FTQuantityModal: escolhe 1, 2 ou 3 lances ───────────────────────────────
+function FTQuantityModal({ player, onChoose, onCancel, allowOne=false }) {
   return (
     <div className="confirm-overlay">
       <div className="confirm-modal">
         <div className="confirm-title">Lances Livres</div>
         <div className="ft-player-label">#{player.number} {player.name.split(' ')[0]}</div>
-        <div className="confirm-btns">
-          <button className="confirm-btn shot-type" onClick={() => onChoose(2)}>2 Lances</button>
-          <button className="confirm-btn shot-type" onClick={() => onChoose(3)}>3 Lances</button>
+        <div className="confirm-btns" style={{flexWrap:'wrap',gap:'8px'}}>
+          {allowOne && (
+            <button className="confirm-btn shot-type" style={{flex:'1 0 80px'}} onClick={() => onChoose(1)}>1 Lance</button>
+          )}
+          <button className="confirm-btn shot-type" style={{flex:'1 0 80px'}} onClick={() => onChoose(2)}>2 Lances</button>
+          <button className="confirm-btn shot-type" style={{flex:'1 0 80px'}} onClick={() => onChoose(3)}>3 Lances</button>
         </div>
         <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
       </div>
@@ -1579,8 +1582,10 @@ export default function App() {
       const entry = { id:Date.now(), q:getQuarterLabel(g.quarter), time:fmtTime(g.clock),
         team:g.teams[activeTeam].name, player:`#${pl.number} ${pl.name.split(' ')[0]}`,
         action:`Falta ${foulType}`, pts:0, color:'#f97316' };
-      // Falta gera posse para o adversário (quem sofreu a falta)
       const gUpdated = { ...g, teams, teamFouls, log:[entry,...g.log] };
+      // Falta técnica/antidesportiva/flagrante: posse NÃO muda (LL resolvido separadamente)
+      // Falta pessoal/ofensiva: posse vai para o adversário
+      if (isTech) return gUpdated;
       return endPossession(gUpdated, 1 - activeTeam, null);
     });
 
@@ -1589,7 +1594,19 @@ export default function App() {
       const reason = isDisq
         ? `#${pl.number} ${pl.name.split(' ')[0]} atingiu ${newFouls} faltas — DISQUALIFICADO`
         : `#${pl.number} ${pl.name.split(' ')[0]} atingiu ${newTechFouls} técnicas — substituição obrigatória`;
-      setSubModal({ reason, outIdx: selectedPlayer, canCancel:false });
+      // Para técnica com disq: abre LL ANTES da sub
+      if (isTech) {
+        setFtFlow({ step:'pick_player', teamIdx: 1 - activeTeam, playerIdx:null,
+          total:1, attempt:1, made:[], fromBonus:false, fromTech:true,
+          afterFtCallback: () => setSubModal({ reason, outIdx: selectedPlayer, canCancel:false }) });
+      } else {
+        setSubModal({ reason, outIdx: selectedPlayer, canCancel:false });
+      }
+    } else if (isTech) {
+      // Falta técnica: 1 LL imediato para o adversário, posse não muda
+      showToast(`Falta técnica — #${pl.number}: 1 LL para ${game.teams[1-activeTeam].name}`);
+      setFtFlow({ step:'pick_player', teamIdx: 1 - activeTeam, playerIdx:null,
+        total:1, attempt:1, made:[], fromBonus:false, fromTech:true });
     } else if (nowBonus) {
       // Bonificação: adversário arremessa 2 LLs — selecionar arremessador
       setFtFlow({ step:'pick_player', teamIdx: 1 - activeTeam, playerIdx:null, total:2, attempt:1, made:[], fromBonus:true });
@@ -1634,17 +1651,28 @@ export default function App() {
   }, [game, setGameWithUndo]);
 
   // ── Finaliza sequência de LL com lógica de posse/rebote ──────────────────────
-  const finishFTSequence = useCallback((ftTeamIdx, allMade) => {
-    // allMade: último arremesso convertido → posse adversário, troca seletor
-    // allMade=false: abrir FTReboundModal (gerenciado pelo ftFlow.step='rebound')
+  const finishFTSequence = useCallback((ftTeamIdx, allMade, flow) => {
+    const fromTech    = flow?.fromTech    || false;
+    const afterFtCb   = flow?.afterFtCallback || null;
+
+    if (fromTech) {
+      // Falta técnica: posse NÃO muda após LL (independente de acerto/erro)
+      // Rebote também não se aplica — bola volta para quem tinha posse
+      setFtFlow(null);
+      if (afterFtCb) afterFtCb(); // ex: abre sub modal após LL
+      showToast('LL técnica encerrado — posse mantida');
+      return;
+    }
+
     if (allMade) {
+      // LL normal convertido → posse adversário, troca seletor
       setGame(g => endPossession(g, 1 - ftTeamIdx, null));
       setActiveTeam(1 - ftTeamIdx);
       setSelectedPlayerA(null);
       setSelectedPlayerB(null);
       setFtFlow(null);
     } else {
-      // Mostrar modal de rebote (step gerenciado externamente)
+      // Último LL errado → modal de rebote
       setFtFlow(prev => ({ ...prev, step: 'rebound' }));
     }
   }, [endPossession]);
@@ -2039,14 +2067,26 @@ export default function App() {
       {ftFlow?.step==='pick_player' && (
         <FreeThrowModal
           players={game.teams[ftFlow.teamIdx].players}
-          title={ftFlow.fromBonus ? 'Bonificação — quem arremessa?' : 'Lance Livre — quem arremessa?'}
-          onSelect={idx => setFtFlow(f => ({...f, step:'pick_quantity', playerIdx:idx}))}
+          title={
+            ftFlow.fromBonus ? 'Bonificação — quem arremessa?' :
+            ftFlow.fromTech  ? 'Falta Técnica — 1 LL para o adversário' :
+                               'Lance Livre — quem arremessa?'
+          }
+          onSelect={idx => {
+            if (ftFlow.fromTech) {
+              // Técnica: pula pick_quantity, vai direto para o 1 lance
+              setFtFlow(f => ({...f, step:'result', playerIdx:idx, total:1, attempt:1}));
+            } else {
+              setFtFlow(f => ({...f, step:'pick_quantity', playerIdx:idx}));
+            }
+          }}
           onCancel={() => setFtFlow(null)}
         />
       )}
       {ftFlow?.step==='pick_quantity' && ftFlow.playerIdx !== null && (
         <FTQuantityModal
           player={game.teams[ftFlow.teamIdx].players[ftFlow.playerIdx]}
+          allowOne={!ftFlow.fromBonus} /* 1 lance disponível exceto em bonificação */
           onChoose={n => setFtFlow(f => ({...f, total:n, attempt:1, step:'result'}))}
           onCancel={() => setFtFlow(null)}
         />
@@ -2064,8 +2104,7 @@ export default function App() {
               if (!isLast) {
                 setFtFlow(f => ({...f, attempt: f.attempt+1, made:[...f.made, true]}));
               } else {
-                // Último LL convertido → posse adversário, troca seletor
-                finishFTSequence(ftFlow.teamIdx, true);
+                finishFTSequence(ftFlow.teamIdx, true, ftFlow);
               }
             }}
             onMissed={() => {
@@ -2073,8 +2112,7 @@ export default function App() {
               if (!isLast) {
                 setFtFlow(f => ({...f, attempt: f.attempt+1, made:[...f.made, false]}));
               } else {
-                // Último LL errado → abre modal de rebote
-                finishFTSequence(ftFlow.teamIdx, false);
+                finishFTSequence(ftFlow.teamIdx, false, ftFlow);
               }
             }}
             onCancel={() => setFtFlow(null)}
