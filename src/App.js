@@ -117,6 +117,37 @@ function exportLogCSV(game) {
   dl(lines.join('\n'), `log_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
 
+function importGameJSON(file, onSuccess, onError) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const game = JSON.parse(e.target.result);
+      // Validação mínima: precisa ter teams e log
+      if (!game.teams || !Array.isArray(game.teams) || game.teams.length !== 2) {
+        onError('Arquivo inválido: estrutura de times não encontrada.');
+        return;
+      }
+      // Gera novo ID para evitar conflito com jogo existente
+      const imported = { ...game, id: Date.now(), importedAt: new Date().toISOString() };
+      onSuccess(imported);
+    } catch (err) {
+      onError('Arquivo JSON inválido ou corrompido.');
+    }
+  };
+  reader.onerror = () => onError('Erro ao ler o arquivo.');
+  reader.readAsText(file);
+}
+
+function exportGameJSON(game) {
+  const json = JSON.stringify(game, null, 2);
+  const b = new Blob([json], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(b);
+  const name = `${game.teams[0].name}_vs_${game.teams[1].name}_${(game.gameDate||game.date||'').replace(/\//g,'-')}`;
+  a.download = `${name}.json`;
+  a.click();
+}
+
 function exportShotsCSV(game) {
   const d = game.gameDate || game.date || '';
   const matchup = `${game.teams[0].name} vs ${game.teams[1].name}`;
@@ -1899,6 +1930,31 @@ export default function App() {
           <button className="btn-new-game" style={{flex:2}} onClick={()=>setShowNewGame(true)}>+ Novo Jogo</button>
           <button className="btn-teams" onClick={()=>setShowTeams(true)}>⚑ Meus Times</button>
         </div>
+        <div style={{display:'flex',gap:'10px',width:'100%',maxWidth:'360px'}}>
+          {/* Botão importar JSON */}
+          <label className="btn-import" title="Importar jogo de arquivo JSON">
+            ↑ Importar JSON
+            <input type="file" accept=".json" style={{display:'none'}}
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                importGameJSON(file,
+                  (imported) => {
+                    setGames(prev => {
+                      const next = [imported, ...prev];
+                      saveGamesLocal(next);
+                      if (user) upsertGame(imported, user.id).catch(() => {});
+                      return next;
+                    });
+                    showToast(`Jogo importado: ${imported.teams[0].name} vs ${imported.teams[1].name}`);
+                    e.target.value = ''; // reset input
+                  },
+                  (err) => { showToast(err); e.target.value = ''; }
+                );
+              }}
+            />
+          </label>
+        </div>
         {games.length > 0 && (
           <div className="recent-games">
             <div className="recent-label">Jogos Salvos</div>
@@ -1922,6 +1978,7 @@ export default function App() {
                   <div className="export-btns" onClick={e=>e.stopPropagation()}>
                     <button className="export-btn" onClick={()=>exportStatsCSV(g)}>Stats</button>
                     <button className="export-btn green" onClick={()=>exportShotsCSV(g)}>Arrem.</button>
+                    <button className="export-btn" style={{color:'var(--blue)',borderColor:'rgba(59,130,246,.3)'}} onClick={()=>exportGameJSON(g)}>JSON</button>
                   </div>
                 </div>
               </div>

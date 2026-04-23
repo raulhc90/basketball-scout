@@ -1843,3 +1843,26 @@ th[title] {
   position: relative;
 }
 
+
+/* ── Botão importar JSON ── */
+.btn-import {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg3);
+  border: 1.5px dashed rgba(59,130,246,.4);
+  color: var(--blue);
+  font-family: var(--fd);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 12px 10px;
+  border-radius: var(--r);
+  cursor: pointer;
+  transition: all .15s;
+  text-align: center;
+}
+.btn-import:active {
+  background: rgba(59,130,246,.12);
+  border-color: var(--blue);
+}
