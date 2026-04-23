@@ -831,8 +831,19 @@ function LoginScreen({ onLogin }) {
         'Invalid login credentials': 'E-mail ou senha incorretos.',
         'Email not confirmed': 'Confirme seu e-mail antes de entrar.',
         'User already registered': 'E-mail já cadastrado.',
+        'Failed to fetch': '⚠️ Sem conexão com o servidor de autenticação. Verifique sua internet ou tente pelo hotspot do celular.',
+        'Load failed': '⚠️ Sem conexão com o servidor de autenticação. Verifique sua internet ou tente pelo hotspot do celular.',
+        'NetworkError when attempting to fetch resource': '⚠️ Rede bloqueando a autenticação. Tente pelo hotspot do celular.',
       };
-      setError(msgs[e.message] || e.message);
+      // Erros de rede geralmente contêm "fetch" na mensagem
+      const isNetworkError = e.message?.toLowerCase().includes('fetch') ||
+                             e.message?.toLowerCase().includes('network') ||
+                             e.message?.toLowerCase().includes('failed');
+      if (isNetworkError) {
+        setError('⚠️ Não foi possível conectar ao servidor. Verifique sua conexão de rede.');
+      } else {
+        setError(msgs[e.message] || e.message);
+      }
     }
     setLoading(false);
   };
