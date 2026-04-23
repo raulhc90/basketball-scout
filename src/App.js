@@ -1618,6 +1618,7 @@ export default function App() {
       } else if (foulType === 'antidesportiva' || foulType === 'flagrante') {
         setFtFlow({ step:'pick_player', teamIdx: 1 - activeTeam, playerIdx:null,
           total:2, attempt:1, made:[], fromBonus:false, fromAnti:true,
+          teamName: game.teams[1 - activeTeam].name,
           afterFtCallback: () => setSubModal({ reason, outIdx: selectedPlayer, canCancel:false }) });
       } else {
         setSubModal({ reason, outIdx: selectedPlayer, canCancel:false });
@@ -1631,7 +1632,8 @@ export default function App() {
       // Antidesportiva/Flagrante: 2 LLs para o adversário + posse fica com o adversário
       showToast(`Falta ${foulType} — #${pl.number}: 2 LLs para ${game.teams[1-activeTeam].name}`);
       setFtFlow({ step:'pick_player', teamIdx: 1 - activeTeam, playerIdx:null,
-        total:2, attempt:1, made:[], fromBonus:false, fromTech:false, fromAnti:true });
+        total:2, attempt:1, made:[], fromBonus:false, fromTech:false, fromAnti:true,
+        teamName: game.teams[1 - activeTeam].name });
     } else if (nowBonus) {
       // Bonificação: adversário arremessa 2 LLs — selecionar arremessador
       setFtFlow({ step:'pick_player', teamIdx: 1 - activeTeam, playerIdx:null, total:2, attempt:1, made:[], fromBonus:true });
@@ -1690,11 +1692,14 @@ export default function App() {
 
     const fromAnti = flow?.fromAnti || false;
     if (fromAnti) {
-      // Antidesportiva/Flagrante: posse já foi definida no commitFoul para o adversário
-      // Após os 2 LLs não abre rebote — posse fica com o adversário independente
+      // Antidesportiva/Flagrante: posse já definida pro adversário no commitFoul
+      // Transfere seletor para o time que sofreu (ftTeamIdx = adversário do infrator)
+      setActiveTeam(ftTeamIdx);
+      setSelectedPlayerA(null);
+      setSelectedPlayerB(null);
       setFtFlow(null);
       if (afterFtCb) afterFtCb();
-      showToast('LLs antidesportiva encerrados — posse com quem sofreu');
+      showToast(`Posse com ${flow?.teamName || 'quem sofreu a falta'}`);
       return;
     }
 
