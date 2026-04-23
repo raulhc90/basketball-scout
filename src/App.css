@@ -1735,3 +1735,111 @@ tr[data-disq=true] { opacity:.6; }
   0%,100% { opacity: 1; }
   50%      { opacity: .6; }
 }
+
+/* ════════════════════════════════════════════════════
+   TIMES SALVOS + CADASTRO
+════════════════════════════════════════════════════ */
+.btn-teams {
+  flex: 1;
+  background: var(--bg3);
+  border: 1.5px solid var(--border);
+  color: var(--muted);
+  font-family: var(--fd);
+  font-size: 15px;
+  font-weight: 700;
+  padding: 14px 10px;
+  border-radius: var(--r);
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-teams:active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Lista de times */
+.team-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--r);
+  border: 1.5px solid var(--border);
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: all .12s;
+  background: var(--bg3);
+}
+.team-list-item.active {
+  border-color: var(--accent);
+  background: rgba(250,233,42,.07);
+}
+.team-list-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-family: var(--fd);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+}
+.team-list-icon { color: var(--accent); font-size: 16px; }
+.team-list-count { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 8px; }
+.team-editor {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 12px;
+  margin-top: 8px;
+}
+
+/* Seletor de time salvo no modal de novo jogo */
+.team-select-saved {
+  width: 100%;
+  background: var(--bg3);
+  border: 1.5px solid rgba(250,233,42,.3);
+  color: var(--accent);
+  font-family: var(--fd);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 10px;
+  border-radius: var(--r);
+  cursor: pointer;
+  margin-bottom: 8px;
+  outline: none;
+}
+.team-select-saved:focus { border-color: var(--accent); }
+
+/* Botão inverter lado de ataque */
+.attack-dir-btn {
+  background: var(--bg3);
+  border: 1.5px solid var(--border);
+  color: var(--text);
+  font-family: var(--fd);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 10px 16px;
+  border-radius: var(--r);
+  cursor: pointer;
+  transition: all .12s;
+  white-space: nowrap;
+}
+.attack-dir-btn:active {
+  background: rgba(250,233,42,.15);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.attack-dir-preview { flex-shrink: 0; }
+
+/* Tooltips nas colunas da tabela de stats */
+th[title] {
+  cursor: help;
+  border-bottom: 1px dashed rgba(255,255,255,.2);
+  position: relative;
+}
+

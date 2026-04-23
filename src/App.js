@@ -48,7 +48,7 @@ const mkTeam = (name, roster) => ({
   players: roster.map((p, i) => ({ id: i+1, ...p, active: i < 5, ...INITIAL_PLAYER() }))
 });
 
-const newGame = (nameA='Time A', nameB='Time B', rosterA=DEFAULT_TEAM_A, rosterB=DEFAULT_TEAM_B) => ({
+const newGame = (nameA='Time A', nameB='Time B', rosterA=DEFAULT_TEAM_A, rosterB=DEFAULT_TEAM_B, homeAttackRight=true) => ({
   id: Date.now(),
   date: new Date().toLocaleDateString('pt-BR'),
   dateFull: new Date().toISOString(),
@@ -56,6 +56,7 @@ const newGame = (nameA='Time A', nameB='Time B', rosterA=DEFAULT_TEAM_A, rosterB
   quarter: 0, clock: 600, log: [], finished: false,
   teamFouls: [[0,0,0,0,0],[0,0,0,0,0]],
   possessions: [0, 0],
+  homeAttackRight: homeAttackRight, // true = casa ataca pra direita no 1Q/2Q
 });
 
 const MISC_ACTIONS = [
@@ -130,11 +131,11 @@ function exportShotsCSV(game) {
 
 // ─── classifyShot ─────────────────────────────────────────────────────────────
 // Retorna direção de ataque considerando troca de lado no intervalo (Q2+)
-function getAttackDir(teamIdx, quarter) {
-  // Times trocam de lado a partir do 3Q (quarter index 2)
-  // Time 0: Q0,Q1 → right; Q2+ → left
-  // Time 1: Q0,Q1 → left;  Q2+ → right
-  const baseRight = teamIdx === 0;
+// homeAttackRight: true = time da casa (idx 0) ataca para a direita no 1Q/2Q
+function getAttackDir(teamIdx, quarter, homeAttackRight = true) {
+  // Time 0 (casa): Q0/Q1 → homeAttackRight; Q2+ → invertido
+  // Time 1 (visitante): sempre oposto ao time 0
+  const baseRight = teamIdx === 0 ? homeAttackRight : !homeAttackRight;
   const swapped = quarter >= 2;
   return (baseRight !== swapped) ? 'right' : 'left';
 }
@@ -886,39 +887,150 @@ function LoginScreen({ onLogin }) {
   );
 }
 
+
+// ─── TeamsScreen ──────────────────────────────────────────────────────────────
+function TeamsScreen({ teams, onSave, onClose }) {
+  const [list, setList]       = useState(teams.map(t => ({ ...t, players: t.players.map(p => ({ ...p })) })));
+  const [editing, setEditing] = useState(null); // idx do time sendo editado
+  const [newName, setNewName] = useState('');
+
+  const addTeam = () => {
+    if (!newName.trim()) return;
+    const t = { id: Date.now().toString(), name: newName.trim(), players: Array.from({length:5}, () => ({ number:'', name:'' })) };
+    setList(prev => [...prev, t]);
+    setNewName('');
+    setEditing(list.length); // abre o novo time para editar
+  };
+
+  const removeTeam = (idx) => {
+    if (!window.confirm('Remover este time?')) return;
+    setList(prev => prev.filter((_,i) => i !== idx));
+    if (editing === idx) setEditing(null);
+  };
+
+  const updPlayer = (ti, pi, field, val) => {
+    setList(prev => prev.map((t,i) => i !== ti ? t : ({
+      ...t,
+      players: t.players.map((p,j) => j !== pi ? p : { ...p, [field]: val })
+    })));
+  };
+  const addPlayer = (ti) => setList(prev => prev.map((t,i) => i !== ti ? t :
+    t.players.length >= 15 ? t : { ...t, players: [...t.players, { number:'', name:'' }] }
+  ));
+  const removePlayer = (ti, pi) => setList(prev => prev.map((t,i) => i !== ti ? t : ({
+    ...t, players: t.players.filter((_,j) => j !== pi)
+  })));
+  const renameTeam = (ti, val) => setList(prev => prev.map((t,i) => i !== ti ? t : { ...t, name: val }));
+
+  const ed = editing !== null ? list[editing] : null;
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{maxWidth:'520px'}}>
+        <div className="modal-header">
+          <span>⚑ Meus Times</span>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body" style={{maxHeight:'70vh',overflowY:'auto'}}>
+          {/* Lista de times */}
+          <div style={{marginBottom:'12px'}}>
+            {list.length === 0 && <div style={{color:'var(--muted)',textAlign:'center',padding:'16px'}}>Nenhum time cadastrado ainda.</div>}
+            {list.map((t,i) => (
+              <div key={t.id} className={`team-list-item${editing===i?' active':''}`}>
+                <button className="team-list-name" onClick={() => setEditing(editing===i?null:i)}>
+                  <span className="team-list-icon">⚑</span>
+                  <span>{t.name}</span>
+                  <span className="team-list-count">{t.players.filter(p=>p.name.trim()).length} jogadores</span>
+                </button>
+                <button className="rm-player-btn" style={{marginLeft:'auto',color:'var(--red)'}}
+                  onClick={() => removeTeam(i)}>✕</button>
+              </div>
+            ))}
+          </div>
+
+          {/* Adicionar novo time */}
+          <div style={{display:'flex',gap:'8px',marginBottom:'16px'}}>
+            <input className="login-input" placeholder="Nome do novo time"
+              value={newName} onChange={e=>setNewName(e.target.value)}
+              onKeyDown={e=>e.key==='Enter'&&addTeam()}
+              style={{flex:1,margin:0}}/>
+            <button className="add-player-btn" style={{width:'auto',padding:'8px 16px',margin:0}}
+              onClick={addTeam}>+ Criar</button>
+          </div>
+
+          {/* Editor do time selecionado */}
+          {ed && (
+            <div className="team-editor">
+              <input className="team-name-input" value={ed.name}
+                onChange={e => renameTeam(editing, e.target.value)}
+                style={{marginBottom:'8px',width:'100%',boxSizing:'border-box'}}/>
+              <div className="modal-roster-header"><span>#</span><span>Nome</span></div>
+              <div className="modal-roster">
+                {ed.players.map((p,pi) => (
+                  <div key={pi} className="modal-player-row">
+                    <input className="num-input" value={p.number} maxLength={2} placeholder="#"
+                      onChange={e=>updPlayer(editing,pi,'number',e.target.value)}/>
+                    <input className="name-inp" value={p.name} placeholder="Nome"
+                      onChange={e=>updPlayer(editing,pi,'name',e.target.value)}/>
+                    {ed.players.length > 1 && (
+                      <button className="rm-player-btn" onClick={()=>removePlayer(editing,pi)}>✕</button>
+                    )}
+                  </div>
+                ))}
+                {ed.players.length < 15 && (
+                  <button className="add-player-btn" onClick={()=>addPlayer(editing)}>+ Jogador</button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn-start" onClick={() => { onSave(list); onClose(); }}>Salvar Times</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── NewGameModal ─────────────────────────────────────────────────────────────
 const BLANK_PLAYER = () => ({ number: '', name: '' });
-function NewGameModal({ onStart, onClose }) {
-  const [startingTeam, setStartingTeam] = useState(0);
+
+function NewGameModal({ onStart, onClose, savedTeams = [] }) {
+  const [startingTeam, setStartingTeam]       = useState(0);
+  const [homeAttackRight, setHomeAttackRight] = useState(true); // true = casa ataca direita
   const [nameA, setNameA] = useState('Time A');
   const [nameB, setNameB] = useState('Time B');
-  // Data do jogo — padrão: hoje no formato DD/MM/AAAA
   const today = new Date();
   const todayStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
   const [gameDate, setGameDate] = useState(todayStr);
-  // Começa com 5 jogadores vazios por time
   const [players, setPlayers] = useState({
     a: Array.from({length:5}, BLANK_PLAYER),
     b: Array.from({length:5}, BLANK_PLAYER),
   });
+
   const upd = (t,i,f,v) => setPlayers(prev=>({...prev,[t]:prev[t].map((p,j)=>j===i?{...p,[f]:v}:p)}));
-  const addPlayer = (t) => setPlayers(prev => {
-    if (prev[t].length >= 15) return prev;
-    return { ...prev, [t]: [...prev[t], BLANK_PLAYER()] };
-  });
-  const removePlayer = (t, i) => setPlayers(prev => ({
-    ...prev, [t]: prev[t].filter((_,j) => j !== i)
-  }));
+  const addPlayer = t => setPlayers(prev => prev[t].length >= 15 ? prev : ({ ...prev, [t]: [...prev[t], BLANK_PLAYER()] }));
+  const removePlayer = (t,i) => setPlayers(prev => ({ ...prev, [t]: prev[t].filter((_,j) => j !== i) }));
+
+  // Carregar time salvo
+  const loadTeam = (key, team) => {
+    if (key === 'a') {
+      setNameA(team.name);
+      setPlayers(prev => ({ ...prev, a: team.players.map(p => ({ number: p.number, name: p.name })) }));
+    } else {
+      setNameB(team.name);
+      setPlayers(prev => ({ ...prev, b: team.players.map(p => ({ number: p.number, name: p.name })) }));
+    }
+  };
 
   const handleStart = () => {
-    // Filtra jogadores com número e nome preenchidos
     const rosterA = players.a.filter(p => p.number.trim() && p.name.trim());
     const rosterB = players.b.filter(p => p.number.trim() && p.name.trim());
     if (rosterA.length < 5 || rosterB.length < 5) {
-      alert(`Cada time precisa ter ao menos 5 jogadores cadastrados.\n${rosterA.length < 5 ? nameA + ' tem ' + rosterA.length + ' jogador(es).' : ''}\n${rosterB.length < 5 ? nameB + ' tem ' + rosterB.length + ' jogador(es).' : ''}`);
+      alert(`Cada time precisa ter ao menos 5 jogadores.\n${rosterA.length < 5 ? nameA+' tem '+rosterA.length+' jogador(es).' : ''}\n${rosterB.length < 5 ? nameB+' tem '+rosterB.length+' jogador(es).' : ''}`);
       return;
     }
-    onStart(nameA, nameB, rosterA, rosterB, startingTeam, gameDate);
+    onStart(nameA, nameB, rosterA, rosterB, startingTeam, gameDate, homeAttackRight);
   };
 
   return (
@@ -929,7 +1041,17 @@ function NewGameModal({ onStart, onClose }) {
           <div className="modal-teams">
             {[['a',nameA,setNameA],['b',nameB,setNameB]].map(([key,name,setName])=>(
               <div key={key} className="modal-team-col">
-                <input className="team-name-input" value={name} onChange={e=>setName(e.target.value)}/>
+                {/* Seletor de time salvo */}
+                {savedTeams.length > 0 && (
+                  <select className="team-select-saved"
+                    onChange={e => { if(e.target.value) loadTeam(key, savedTeams.find(t=>t.id===e.target.value)); e.target.value=''; }}
+                    defaultValue="">
+                    <option value="">↓ Carregar time salvo</option>
+                    {savedTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                )}
+                <input className="team-name-input" value={name} onChange={e=>setName(e.target.value)}
+                  placeholder={key==='a'?'Time da Casa (esquerda)':'Time Visitante (direita)'}/>
                 <div className="modal-roster-header"><span>#</span><span>Nome</span></div>
                 <div className="modal-roster">
                   {players[key].map((p,i)=>(
@@ -948,24 +1070,22 @@ function NewGameModal({ onStart, onClose }) {
               </div>
             ))}
           </div>
+
+          {/* Data */}
           <div style={{marginTop:12}}>
             <div style={{marginBottom:6,fontWeight:'bold',color:'var(--text)'}}>Data do jogo:</div>
-            <input
-              className="login-input"
-              type="text"
-              placeholder="DD/MM/AAAA"
-              value={gameDate}
-              maxLength={10}
+            <input className="login-input" type="text" placeholder="DD/MM/AAAA"
+              value={gameDate} maxLength={10}
               onChange={e => {
-                // Auto-formatar: inserir / automaticamente
                 let v = e.target.value.replace(/\D/g,'');
                 if (v.length > 2) v = v.slice(0,2)+'/'+v.slice(2);
                 if (v.length > 5) v = v.slice(0,5)+'/'+v.slice(5,9);
                 setGameDate(v);
               }}
-              style={{width:'100%',boxSizing:'border-box',marginBottom:0}}
-            />
+              style={{width:'100%',boxSizing:'border-box',marginBottom:0}}/>
           </div>
+
+          {/* Posse inicial */}
           <div style={{marginTop:12}}>
             <div style={{marginBottom:6,fontWeight:'bold',color:'var(--text)'}}>Posse inicial:</div>
             <div style={{display:'flex',gap:8}}>
@@ -979,9 +1099,50 @@ function NewGameModal({ onStart, onClose }) {
               </button>
             </div>
           </div>
+
+          {/* Lado de ataque inicial */}
+          <div style={{marginTop:12}}>
+            <div style={{marginBottom:6,fontWeight:'bold',color:'var(--text)'}}>
+              Lado de ataque — 1º Tempo:
+            </div>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <div className="attack-dir-preview">
+                {/* mini quadra mostrando direção */}
+                <svg viewBox="0 0 120 60" width="120" height="60" style={{borderRadius:'6px',border:'1px solid var(--border)'}}>
+                  <rect width="120" height="60" fill="#1a1f2a"/>
+                  <line x1="60" y1="2" x2="60" y2="58" stroke="var(--border)" strokeWidth="1" strokeDasharray="3 2"/>
+                  <rect x="2" y="15" width="22" height="30" fill="none" stroke="#4a5570" strokeWidth="1"/>
+                  <rect x="96" y="15" width="22" height="30" fill="none" stroke="#4a5570" strokeWidth="1"/>
+                  <circle cx="8" cy="30" r="4" fill="none" stroke="#f97316" strokeWidth="1.2"/>
+                  <circle cx="112" cy="30" r="4" fill="none" stroke="#f97316" strokeWidth="1.2"/>
+                  {homeAttackRight ? (<>
+                    <line x1="35" y1="30" x2="72" y2="30" stroke="#fae92a" strokeWidth="2" strokeDasharray="4 3" strokeLinecap="round"/>
+                    <polygon points="72,25 82,30 72,35" fill="#fae92a"/>
+                    <text x="20" y="12" fill="#fae92a" fontSize="7" fontFamily="sans-serif" fontWeight="bold">{nameA}</text>
+                    <text x="68" y="12" fill="var(--muted)" fontSize="7" fontFamily="sans-serif">{nameB}</text>
+                  </>) : (<>
+                    <line x1="85" y1="30" x2="48" y2="30" stroke="#fae92a" strokeWidth="2" strokeDasharray="4 3" strokeLinecap="round"/>
+                    <polygon points="48,25 38,30 48,35" fill="#fae92a"/>
+                    <text x="3" y="12" fill="var(--muted)" fontSize="7" fontFamily="sans-serif">{nameA}</text>
+                    <text x="65" y="12" fill="#fae92a" fontSize="7" fontFamily="sans-serif" fontWeight="bold">{nameA}</text>
+                  </>)}
+                </svg>
+              </div>
+              <button type="button" className="attack-dir-btn"
+                onClick={() => setHomeAttackRight(v => !v)}>
+                ⇄ Inverter lado
+              </button>
+            </div>
+            <div style={{marginTop:6,fontSize:'12px',color:'var(--muted)'}}>
+              {homeAttackRight
+                ? `${nameA} (casa) ataca para a DIREITA no 1º tempo`
+                : `${nameA} (casa) ataca para a ESQUERDA no 1º tempo`}
+              {' — no 2º tempo os lados invertem automaticamente.'}
+            </div>
+          </div>
         </div>
         <div className="modal-footer">
-          <button className="btn-start" onClick={handleStart}>Iniciar Jogo</button>
+          <button className="btn-start" onClick={handleStart}>▶ Iniciar Jogo</button>
         </div>
       </div>
     </div>
@@ -992,9 +1153,13 @@ function NewGameModal({ onStart, onClose }) {
 export default function App() {
   const [screen, setScreen]       = useState('home');
   const [games, setGames]         = useState(loadGamesLocal);
-  const [user, setUser]           = useState(null);      // usuário autenticado
-  const [authLoading, setAuthLoading] = useState(true);  // aguardando sessão
-  const [syncStatus, setSyncStatus]   = useState('');    // 'syncing' | 'saved' | 'error' | ''
+  const [user, setUser]           = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [syncStatus, setSyncStatus]   = useState('');
+  const [savedTeams, setSavedTeams]   = useState(() => {
+    try { return JSON.parse(localStorage.getItem('wf_teams')||'[]'); } catch { return []; }
+  });
+  const [showTeams, setShowTeams] = useState(false); // tela de gerenciar times
   const [game, setGame]     = useState(null);
   const [running, setRunning] = useState(false);
   const [activeTeam, setActiveTeam] = useState(0);
@@ -1129,6 +1294,11 @@ export default function App() {
 
   const showToast = msg => { setToast(msg); setTimeout(()=>setToast(null),1800); };
 
+  const saveTeams = (teams) => {
+    setSavedTeams(teams);
+    localStorage.setItem('wf_teams', JSON.stringify(teams));
+  };
+
   // ── Posse: incrementa possessions respeitando regra da 1ª posse ──────────
   // O time que iniciou o jogo só conta nova posse após o adversário ter tido 1.
   const endPossession = useCallback((g, teamIdx, playerIdx = null) => {
@@ -1250,9 +1420,9 @@ export default function App() {
   }, [activeTeam, selectedPlayerA, selectedPlayerB, setGameWithUndo, endPossession]);
 
   // ── startGame ───────────────────────────────────────────────────────────────
-  const startGame = (nameA, nameB, rosterA, rosterB, startingTeam, gameDate) => {
+  const startGame = (nameA, nameB, rosterA, rosterB, startingTeam, gameDate, homeAttackRight=true) => {
     const g = {
-      ...newGame(nameA, nameB, rosterA, rosterB),
+      ...newGame(nameA, nameB, rosterA, rosterB, homeAttackRight),
       possessions: startingTeam === 0 ? [1,0] : [0,1],
       firstPossTeam: startingTeam,
       adversaryHadPoss: false,
@@ -1265,7 +1435,7 @@ export default function App() {
     setActiveTeam(startingTeam);
     setSelectedPlayerA(null);
     setSelectedPlayerB(null);
-    setRunning(false);
+    setRunning(true); // cronômetro dispara automaticamente ao iniciar
   };
 
   const openGame = g => {
@@ -1544,7 +1714,7 @@ export default function App() {
     const rect = e.currentTarget.getBoundingClientRect();
     const xPct = (e.clientX-rect.left)/rect.width*100;
     const yPct = (e.clientY-rect.top)/rect.height*100;
-    const dir = getAttackDir(activeTeam, game.quarter);
+    const dir = getAttackDir(activeTeam, game.quarter, game.homeAttackRight ?? true);
     const { valid, three, inPaint } = classifyShot(xPct,yPct,dir);
     if (!valid) { showToast('Arremesso no lado errado da quadra'); return; }
     setConfirmShot({ xPct, yPct, three, inPaint });
@@ -1625,7 +1795,8 @@ export default function App() {
 
   if (screen === 'home') return (
     <div className="app">
-      {showNewGame && <NewGameModal onStart={startGame} onClose={()=>setShowNewGame(false)}/>}
+      {showNewGame && <NewGameModal onStart={startGame} onClose={()=>setShowNewGame(false)} savedTeams={savedTeams}/>}
+      {showTeams && <TeamsScreen teams={savedTeams} onSave={saveTeams} onClose={()=>setShowTeams(false)}/>}
       <div className="home-screen">
         <div className="home-logo">
           <div className="logo-ball">
@@ -1646,7 +1817,10 @@ export default function App() {
             Sair
           </button>
         </div>
-        <button className="btn-new-game" onClick={()=>setShowNewGame(true)}>+ Novo Jogo</button>
+        <div style={{display:'flex',gap:'10px',width:'100%',maxWidth:'360px'}}>
+          <button className="btn-new-game" style={{flex:2}} onClick={()=>setShowNewGame(true)}>+ Novo Jogo</button>
+          <button className="btn-teams" onClick={()=>setShowTeams(true)}>⚑ Meus Times</button>
+        </div>
         {games.length > 0 && (
           <div className="recent-games">
             <div className="recent-label">Jogos Salvos</div>
@@ -2082,7 +2256,7 @@ export default function App() {
               {renderTeamPanel(0)}
               <div className="court-container">
                 <BasketballCourt shots={activeShots} onCourtClick={handleCourtClick}
-                  hasPlayer={selectedPlayer!==null} attackDir={getAttackDir(activeTeam, game.quarter)}/>
+                  hasPlayer={selectedPlayer!==null} attackDir={getAttackDir(activeTeam, game.quarter, game.homeAttackRight ?? true)}/>
               </div>
               {renderTeamPanel(1)}
             </div>
@@ -2189,10 +2363,26 @@ export default function App() {
                   <div className="table-wrap">
                     <table className="stats-table">
                       <thead><tr>
-                        <th>Atleta</th><th>MIN</th><th>POS</th><th>PTS</th><th>AST</th>
-                        <th>REB</th><th>RO</th><th>STL</th><th>BLK</th><th>TO</th>
-                        <th>2P</th><th>FG%</th><th>3P</th><th>3P%</th>
-                        <th>LL</th><th>LL%</th><th>FL</th><th>FS</th><th>+/-</th><th>PIR</th>
+                        <th title="Atleta">Atleta</th>
+                        <th title="Minutos jogados">MIN</th>
+                        <th title="Posses iniciadas pelo atleta">POS</th>
+                        <th title="Pontos">PTS</th>
+                        <th title="Assistências — passes que resultaram em cesta">AST</th>
+                        <th title="Rebotes defensivos">REB</th>
+                        <th title="Rebotes ofensivos">RO</th>
+                        <th title="Roubos de bola">STL</th>
+                        <th title="Tocos (arremessos bloqueados)">BLK</th>
+                        <th title="Turnovers (perdas de posse)">TO</th>
+                        <th title="Cestas de 2 pontos: convertidas/tentadas">2P</th>
+                        <th title="Field Goal % — aproveitamento geral de campo (2pts + 3pts)">FG%</th>
+                        <th title="Cestas de 3 pontos: convertidas/tentadas">3P</th>
+                        <th title="Aproveitamento nos arremessos de 3 pontos">3P%</th>
+                        <th title="Lances livres: convertidos/tentados">LL</th>
+                        <th title="Aproveitamento nos lances livres">LL%</th>
+                        <th title="Faltas cometidas">FL</th>
+                        <th title="Faltas sofridas">FS</th>
+                        <th title="Plus/Minus — diferença de pontos com o atleta em quadra">+/-</th>
+                        <th title="Performance Index Rating (FIBA) = PTS+REB+AST+STL+BLK+(FGM-FGA)+(FTM-FTA)-TO-FL">PIR</th>
                       </tr></thead>
                       <tbody>
                         {active.map(p=>(
