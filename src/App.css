@@ -1724,3 +1724,14 @@ tr[data-disq=true] { opacity:.6; }
 .next-q-btn:not([data-finished=true]) {
   /* estilo normal já definido acima */
 }
+
+/* ── Badge online (jogo ao vivo) ── */
+.sync-badge.online {
+  background: rgba(34,197,94,.18);
+  color: var(--green);
+  animation: pulse-online 2s ease-in-out infinite;
+}
+@keyframes pulse-online {
+  0%,100% { opacity: 1; }
+  50%      { opacity: .6; }
+}

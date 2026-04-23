@@ -86,34 +86,40 @@ function dl(content, filename) {
 }
 
 function exportStatsCSV(game) {
-  const lines = ['Atleta,Time,MIN,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG%,FG3M,FG3A,3P%,FTM,FTA,LL%,FALTAS,FALTAS.SOF,+/-,PIR,POSSES.ATL'];
+  const d = game.gameDate || game.date || '';
+  const matchup = `${game.teams[0].name} vs ${game.teams[1].name}`;
+  const lines = [`Data,Jogo,Atleta,Time,MIN,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG%,FG3M,FG3A,3P%,FTM,FTA,LL%,FALTAS,FALTAS.SOF,+/-,PIR,POSSES.ATL`];
   game.teams.forEach((t, ti) => {
     t.players.forEach(p => {
       const pm = (p.plusMinus||0) >= 0 ? `+${p.plusMinus||0}` : `${p.plusMinus||0}`;
       const min = `${Math.floor((p.timeOnCourt||0)/60)}:${String(Math.round((p.timeOnCourt||0)%60)).padStart(2,'0')}`;
-      lines.push(`"#${p.number} ${p.name}","${t.name}",${min},${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${p.fg3m},${p.fg3a},${pct(p.fg3m,p.fg3a)},${p.ftm},${p.fta},${pct(p.ftm,p.fta)},${p.fouls},${p.foulsReceived||0},${pm},${calcPIR(p)},${p.possessions||0}`);
+      lines.push(`"${d}","${matchup}","#${p.number} ${p.name}","${t.name}",${min},${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${p.fg3m},${p.fg3a},${pct(p.fg3m,p.fg3a)},${p.ftm},${p.fta},${pct(p.ftm,p.fta)},${p.fouls},${p.foulsReceived||0},${pm},${calcPIR(p)},${p.possessions||0}`);
     });
     const tot = totals(t);
     const teamPoss = (game.possessions||[0,0])[ti]||0;
-    lines.push(`"TOTAL","${t.name}",,${tot.pts},${tot.ast},${tot.reb},${tot.oreb},${tot.stl},${tot.blk},${tot.to},${tot.fg2m},${tot.fg2a},${pct(tot.fg2m+tot.fg3m,tot.fg2a+tot.fg3a)},${tot.fg3m},${tot.fg3a},${pct(tot.fg3m,tot.fg3a)},${tot.ftm},${tot.fta},${pct(tot.ftm,tot.fta)},${tot.fouls},,,,${teamPoss} (time) / ${tot.possessions||0} (atletas)`);
+    lines.push(`"${d}","${matchup}","TOTAL","${t.name}",,${tot.pts},${tot.ast},${tot.reb},${tot.oreb},${tot.stl},${tot.blk},${tot.to},${tot.fg2m},${tot.fg2a},${pct(tot.fg2m+tot.fg3m,tot.fg2a+tot.fg3a)},${tot.fg3m},${tot.fg3a},${pct(tot.fg3m,tot.fg3a)},${tot.ftm},${tot.fta},${pct(tot.ftm,tot.fta)},${tot.fouls},,,,${teamPoss} (time) / ${tot.possessions||0} (atletas)`);
   });
   dl(lines.join('\n'), `stats_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
 
 function exportLogCSV(game) {
-  const lines = ['Quarto,Tempo,Time,Atleta,Acao,Pontos'];
+  const d = game.gameDate || game.date || '';
+  const matchup = `${game.teams[0].name} vs ${game.teams[1].name}`;
+  const lines = ['Data,Jogo,Quarto,Tempo,Time,Atleta,Acao,Pontos'];
   game.log.forEach(e => {
-    lines.push(`"${e.q}","${e.time}","${e.team}","${e.player}","${e.action}",${e.pts}`);
+    lines.push(`"${d}","${matchup}","${e.q}","${e.time}","${e.team}","${e.player}","${e.action}",${e.pts}`);
   });
   dl(lines.join('\n'), `log_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
 
 function exportShotsCSV(game) {
-  const lines = ['Atleta,Time,Quarto,Tempo,X_pct,Y_pct,Convertido,Zona,Subtipo,Assistencia'];
+  const d = game.gameDate || game.date || '';
+  const matchup = `${game.teams[0].name} vs ${game.teams[1].name}`;
+  const lines = ['Data,Jogo,Atleta,Time,Quarto,Tempo,X_pct,Y_pct,Convertido,Zona,Subtipo,Assistencia'];
   game.teams.forEach(t => t.players.forEach(p =>
     (p.shots||[]).forEach(s => {
       const subtipo = s.three ? 'Arremesso' : (s.shotType && s.shotType !== '3pts' ? s.shotType : 'Arremesso');
-      lines.push(`"#${p.number} ${p.name}","${t.name}","${s.q||''}","${s.time||''}",${s.x.toFixed(2)},${s.y.toFixed(2)},${s.made?'Sim':'Não'},${s.three?'3pts':'2pts'},"${subtipo}","${s.assistedBy||''}"`);
+      lines.push(`"${d}","${matchup}","#${p.number} ${p.name}","${t.name}","${s.q||''}","${s.time||''}",${s.x.toFixed(2)},${s.y.toFixed(2)},${s.made?'Sim':'Não'},${s.three?'3pts':'2pts'},"${subtipo}","${s.assistedBy||''}"`);
     })));
   dl(lines.join('\n'), `arremessos_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
@@ -882,6 +888,10 @@ function NewGameModal({ onStart, onClose }) {
   const [startingTeam, setStartingTeam] = useState(0);
   const [nameA, setNameA] = useState('Time A');
   const [nameB, setNameB] = useState('Time B');
+  // Data do jogo — padrão: hoje no formato DD/MM/AAAA
+  const today = new Date();
+  const todayStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
+  const [gameDate, setGameDate] = useState(todayStr);
   // Começa com 5 jogadores vazios por time
   const [players, setPlayers] = useState({
     a: Array.from({length:5}, BLANK_PLAYER),
@@ -904,7 +914,7 @@ function NewGameModal({ onStart, onClose }) {
       alert(`Cada time precisa ter ao menos 5 jogadores cadastrados.\n${rosterA.length < 5 ? nameA + ' tem ' + rosterA.length + ' jogador(es).' : ''}\n${rosterB.length < 5 ? nameB + ' tem ' + rosterB.length + ' jogador(es).' : ''}`);
       return;
     }
-    onStart(nameA, nameB, rosterA, rosterB, startingTeam);
+    onStart(nameA, nameB, rosterA, rosterB, startingTeam, gameDate);
   };
 
   return (
@@ -934,7 +944,25 @@ function NewGameModal({ onStart, onClose }) {
               </div>
             ))}
           </div>
-          <div style={{marginTop:16}}>
+          <div style={{marginTop:12}}>
+            <div style={{marginBottom:6,fontWeight:'bold',color:'var(--text)'}}>Data do jogo:</div>
+            <input
+              className="login-input"
+              type="text"
+              placeholder="DD/MM/AAAA"
+              value={gameDate}
+              maxLength={10}
+              onChange={e => {
+                // Auto-formatar: inserir / automaticamente
+                let v = e.target.value.replace(/\D/g,'');
+                if (v.length > 2) v = v.slice(0,2)+'/'+v.slice(2);
+                if (v.length > 5) v = v.slice(0,5)+'/'+v.slice(5,9);
+                setGameDate(v);
+              }}
+              style={{width:'100%',boxSizing:'border-box',marginBottom:0}}
+            />
+          </div>
+          <div style={{marginTop:12}}>
             <div style={{marginBottom:6,fontWeight:'bold',color:'var(--text)'}}>Posse inicial:</div>
             <div style={{display:'flex',gap:8}}>
               <button type="button" onClick={()=>setStartingTeam(0)}
@@ -986,6 +1014,7 @@ export default function App() {
   // reboundPending: { playerIdx, three, shotType } quando arremesso errado aguarda rebote
   const [reboundPending, setReboundPending] = useState(null);
   const undoStack = useRef([]);
+  const syncTimer = useRef(null);   // debounce do sync para Supabase
 
   // Helper: índice do atleta selecionado no time ativo
   const selectedPlayer = activeTeam === 0 ? selectedPlayerA : selectedPlayerB;
@@ -1069,23 +1098,30 @@ export default function App() {
       });
   }, [user]);
 
-  // ── Auto-save: localStorage + Supabase ──────────────────────────────────────
+  // ── Auto-save: localStorage + Supabase com debounce ────────────────────────
   useEffect(() => {
     if (!game) return;
+    // Salva localmente sempre e imediatamente
     setGames(prev => {
       const idx = prev.findIndex(g => g.id === game.id);
       const next = idx >= 0 ? prev.map((g,i)=>i===idx?game:g) : [game,...prev];
       saveGamesLocal(next);
-      // Sync para nuvem se logado
-      if (user) {
-        setSyncStatus('syncing');
-        upsertGame(game, user.id)
-          .then(() => { setSyncStatus('saved'); setTimeout(()=>setSyncStatus(''),2000); })
-          .catch(() => setSyncStatus('error'));
-      }
       return next;
     });
-  }, [game, user]);
+    // Sync para nuvem: debounce de 4s para não disparar a cada ação durante o jogo
+    if (user) {
+      clearTimeout(syncTimer.current);
+      syncTimer.current = setTimeout(() => {
+        setSyncStatus('syncing');
+        upsertGame(game, user.id)
+          .then(() => {
+            setSyncStatus('saved');
+            setTimeout(() => setSyncStatus(''), 3000);
+          })
+          .catch(() => setSyncStatus('error'));
+      }, 4000);
+    }
+  }, [game, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const showToast = msg => { setToast(msg); setTimeout(()=>setToast(null),1800); };
 
@@ -1210,12 +1246,13 @@ export default function App() {
   }, [activeTeam, selectedPlayerA, selectedPlayerB, setGameWithUndo, endPossession]);
 
   // ── startGame ───────────────────────────────────────────────────────────────
-  const startGame = (nameA, nameB, rosterA, rosterB, startingTeam) => {
+  const startGame = (nameA, nameB, rosterA, rosterB, startingTeam, gameDate) => {
     const g = {
       ...newGame(nameA, nameB, rosterA, rosterB),
       possessions: startingTeam === 0 ? [1,0] : [0,1],
       firstPossTeam: startingTeam,
       adversaryHadPoss: false,
+      gameDate: gameDate || new Date().toLocaleDateString('pt-BR'),
     };
     setGame(g);
     setShowNewGame(false);
@@ -1625,7 +1662,7 @@ export default function App() {
                   <span>{g.teams[1].name}</span>
                 </div>
                 <div className="game-card-meta">
-                  <span>{g.date}</span><span>{QUARTERS[g.quarter]||'OT'}</span><span>{g.log.length} eventos</span>
+                  <span>{g.gameDate||g.date}</span><span>{QUARTERS[g.quarter]||'OT'}</span><span>{g.log.length} eventos</span>
                   <div className="export-btns" onClick={e=>e.stopPropagation()}>
                     <button className="export-btn" onClick={()=>exportStatsCSV(g)}>Stats</button>
                     <button className="export-btn green" onClick={()=>exportShotsCSV(g)}>Arrem.</button>
@@ -1912,9 +1949,10 @@ export default function App() {
           <button className="back-btn" onClick={()=>{setRunning(false);setScreen('home');}}>‹ Voltar</button>
           <div className="header-game-label">
             {game.teams[0].name} vs {game.teams[1].name}
-            {syncStatus==='syncing'&&<span className="sync-badge syncing">↑ salvando</span>}
-            {syncStatus==='saved'&&<span className="sync-badge saved">✓ salvo</span>}
-            {syncStatus==='error'&&<span className="sync-badge error">✗ offline</span>}
+            {user && running && <span className="sync-badge online">● online</span>}
+            {user && !running && syncStatus==='syncing' && <span className="sync-badge syncing">↑ salvando</span>}
+            {user && !running && syncStatus==='saved'   && <span className="sync-badge saved">✓ salvo</span>}
+            {user && !running && syncStatus==='error'   && <span className="sync-badge error">✗ offline</span>}
           </div>
           <div className="export-btns">
             <button className="export-btn-sm" onClick={()=>exportStatsCSV(game)}>Stats</button>
