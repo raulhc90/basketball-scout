@@ -840,7 +840,7 @@ function LoginScreen({ onLogin }) {
                              e.message?.toLowerCase().includes('network') ||
                              e.message?.toLowerCase().includes('failed');
       if (isNetworkError) {
-        setError('⚠️ Não foi possível conectar ao servidor. Verifique sua conexão de rede.');
+        setError('⚠️ Não foi possível conectar ao servidor. Sua rede pode estar bloqueando o acesso. Tente pelo hotspot do celular ou em outra rede.');
       } else {
         setError(msgs[e.message] || e.message);
       }
@@ -1594,9 +1594,14 @@ export default function App() {
         team:g.teams[activeTeam].name, player:`#${pl.number} ${pl.name.split(' ')[0]}`,
         action:`Falta ${foulType}`, pts:0, color:'#f97316' };
       const gUpdated = { ...g, teams, teamFouls, log:[entry,...g.log] };
-      // Falta técnica/antidesportiva/flagrante: posse NÃO muda (LL resolvido separadamente)
-      // Falta pessoal/ofensiva: posse vai para o adversário
-      if (isTech) return gUpdated;
+      // Regras de posse por tipo de falta:
+      // - Técnica: posse NÃO muda (LL técnico resolvido separadamente)
+      // - Antidesportiva/Flagrante: posse vai para quem SOFREU (adversário do infrator)
+      // - Pessoal/Ofensiva: posse vai para o adversário
+      if (foulType === 'tecnica') return gUpdated;
+      if (foulType === 'antidesportiva' || foulType === 'flagrante') {
+        return endPossession(gUpdated, 1 - activeTeam, null);
+      }
       return endPossession(gUpdated, 1 - activeTeam, null);
     });
 
@@ -1605,19 +1610,28 @@ export default function App() {
       const reason = isDisq
         ? `#${pl.number} ${pl.name.split(' ')[0]} atingiu ${newFouls} faltas — DISQUALIFICADO`
         : `#${pl.number} ${pl.name.split(' ')[0]} atingiu ${newTechFouls} técnicas — substituição obrigatória`;
-      // Para técnica com disq: abre LL ANTES da sub
-      if (isTech) {
+      // Para técnica/antidesportiva com disq: abre LL ANTES da sub
+      if (foulType === 'tecnica') {
         setFtFlow({ step:'pick_player', teamIdx: 1 - activeTeam, playerIdx:null,
           total:1, attempt:1, made:[], fromBonus:false, fromTech:true,
+          afterFtCallback: () => setSubModal({ reason, outIdx: selectedPlayer, canCancel:false }) });
+      } else if (foulType === 'antidesportiva' || foulType === 'flagrante') {
+        setFtFlow({ step:'pick_player', teamIdx: 1 - activeTeam, playerIdx:null,
+          total:2, attempt:1, made:[], fromBonus:false, fromAnti:true,
           afterFtCallback: () => setSubModal({ reason, outIdx: selectedPlayer, canCancel:false }) });
       } else {
         setSubModal({ reason, outIdx: selectedPlayer, canCancel:false });
       }
-    } else if (isTech) {
-      // Falta técnica: 1 LL imediato para o adversário, posse não muda
+    } else if (foulType === 'tecnica') {
+      // Técnica: 1 LL para o adversário, posse NÃO muda
       showToast(`Falta técnica — #${pl.number}: 1 LL para ${game.teams[1-activeTeam].name}`);
       setFtFlow({ step:'pick_player', teamIdx: 1 - activeTeam, playerIdx:null,
         total:1, attempt:1, made:[], fromBonus:false, fromTech:true });
+    } else if (foulType === 'antidesportiva' || foulType === 'flagrante') {
+      // Antidesportiva/Flagrante: 2 LLs para o adversário + posse fica com o adversário
+      showToast(`Falta ${foulType} — #${pl.number}: 2 LLs para ${game.teams[1-activeTeam].name}`);
+      setFtFlow({ step:'pick_player', teamIdx: 1 - activeTeam, playerIdx:null,
+        total:2, attempt:1, made:[], fromBonus:false, fromTech:false, fromAnti:true });
     } else if (nowBonus) {
       // Bonificação: adversário arremessa 2 LLs — selecionar arremessador
       setFtFlow({ step:'pick_player', teamIdx: 1 - activeTeam, playerIdx:null, total:2, attempt:1, made:[], fromBonus:true });
@@ -1667,11 +1681,20 @@ export default function App() {
     const afterFtCb   = flow?.afterFtCallback || null;
 
     if (fromTech) {
-      // Falta técnica: posse NÃO muda após LL (independente de acerto/erro)
-      // Rebote também não se aplica — bola volta para quem tinha posse
+      // Técnica: posse NÃO muda após LL
       setFtFlow(null);
-      if (afterFtCb) afterFtCb(); // ex: abre sub modal após LL
+      if (afterFtCb) afterFtCb();
       showToast('LL técnica encerrado — posse mantida');
+      return;
+    }
+
+    const fromAnti = flow?.fromAnti || false;
+    if (fromAnti) {
+      // Antidesportiva/Flagrante: posse já foi definida no commitFoul para o adversário
+      // Após os 2 LLs não abre rebote — posse fica com o adversário independente
+      setFtFlow(null);
+      if (afterFtCb) afterFtCb();
+      showToast('LLs antidesportiva encerrados — posse com quem sofreu');
       return;
     }
 
@@ -2081,12 +2104,16 @@ export default function App() {
           title={
             ftFlow.fromBonus ? 'Bonificação — quem arremessa?' :
             ftFlow.fromTech  ? 'Falta Técnica — 1 LL para o adversário' :
+            ftFlow.fromAnti  ? 'Antidesportiva — 2 LLs para o adversário' :
                                'Lance Livre — quem arremessa?'
           }
           onSelect={idx => {
             if (ftFlow.fromTech) {
-              // Técnica: pula pick_quantity, vai direto para o 1 lance
+              // Técnica: pula pick_quantity → 1 lance direto
               setFtFlow(f => ({...f, step:'result', playerIdx:idx, total:1, attempt:1}));
+            } else if (ftFlow.fromAnti) {
+              // Antidesportiva/Flagrante: pula pick_quantity → 2 lances direto
+              setFtFlow(f => ({...f, step:'result', playerIdx:idx, total:2, attempt:1}));
             } else {
               setFtFlow(f => ({...f, step:'pick_quantity', playerIdx:idx}));
             }
