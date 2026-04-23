@@ -1933,7 +1933,7 @@ export default function App() {
         <div style={{display:'flex',gap:'10px',width:'100%',maxWidth:'360px'}}>
           {/* Botão importar JSON */}
           <label className="btn-import" title="Importar jogo de arquivo JSON">
-            ↑ Importar JSON
+            ↑ Importar Jogo Completo
             <input type="file" accept=".json" style={{display:'none'}}
               onChange={e => {
                 const file = e.target.files?.[0];
