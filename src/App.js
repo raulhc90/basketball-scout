@@ -78,8 +78,10 @@ const totals = team => team.players.reduce((acc, p) => {
 }, {});
 
 // localStorage como fallback offline
-function loadGamesLocal() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; } }
-function saveGamesLocal(g) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(g)); } catch {} }
+function gamesKey(uid)    { return uid ? `${STORAGE_KEY}_${uid}` : STORAGE_KEY; }
+function teamsLSKey(uid)  { return uid ? `wf_teams_${uid}` : 'wf_teams'; }
+function loadGamesLocal(uid)    { try { return JSON.parse(localStorage.getItem(gamesKey(uid))) || []; } catch { return []; } }
+function saveGamesLocal(g, uid) { try { localStorage.setItem(gamesKey(uid), JSON.stringify(g)); } catch {} }
 
 function dl(content, filename) {
   const b = new Blob(['\ufeff'+content], {type:'text/csv;charset=utf-8'});
@@ -1215,7 +1217,7 @@ function NewGameModal({ onStart, onClose, savedTeams = [] }) {
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [screen, setScreen]       = useState('home');
-  const [games, setGames]         = useState(loadGamesLocal);
+  const [games, setGames]         = useState([]);
   const [user, setUser]           = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [syncStatus, setSyncStatus]   = useState('');
@@ -1309,8 +1311,14 @@ export default function App() {
     });
     // Escuta mudanças de auth (login/logout)
     const { data: { subscription } } = onAuthChange((_event, session) => {
-      setUser(session?.user ?? null);
+      const newUser = session?.user ?? null;
+      setUser(newUser);
       setAuthLoading(false);
+      if (!newUser) {
+        setSavedTeams([]);
+        setGames([]);
+        setTeamsSyncStatus('');
+      }
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -1318,28 +1326,33 @@ export default function App() {
   // ── Carrega jogos e times do Supabase quando usuário loga ──────────────────
   useEffect(() => {
     if (!user) return;
-    // Jogos
+    // ── Jogos: local primeiro, nuvem depois ──
+    const localGames = loadGamesLocal(user.id);
+    if (localGames.length > 0) setGames(localGames);
     fetchGames(user.id)
       .then(cloudGames => {
         if (cloudGames.length > 0) {
           setGames(cloudGames);
-          saveGamesLocal(cloudGames);
+          saveGamesLocal(cloudGames, user.id);
         }
       })
-      .catch(() => setGames(loadGamesLocal()));
-    // Times
+      .catch(() => {});
+
+    // ── Times: local primeiro, nuvem depois ──
+    const localTeams = JSON.parse(localStorage.getItem(teamsLSKey(user.id))||'[]');
+    if (localTeams.length > 0) setSavedTeams(localTeams);
     fetchTeams(user.id)
       .then(cloudTeams => {
         if (cloudTeams.length > 0) {
           setSavedTeams(cloudTeams);
-          localStorage.setItem('wf_teams', JSON.stringify(cloudTeams));
+          localStorage.setItem(teamsLSKey(user.id), JSON.stringify(cloudTeams));
           setTeamsSyncStatus('saved');
+        } else if (localTeams.length > 0) {
+          setTeamsSyncStatus('pending');
         }
       })
       .catch(() => {
-        // Sem conexão: times locais podem estar pendentes
-        const local = JSON.parse(localStorage.getItem('wf_teams')||'[]');
-        if (local.length > 0) setTeamsSyncStatus('pending');
+        if (localTeams.length > 0) setTeamsSyncStatus('pending');
       });
   }, [user]);
 
@@ -1350,7 +1363,7 @@ export default function App() {
     setGames(prev => {
       const idx = prev.findIndex(g => g.id === game.id);
       const next = idx >= 0 ? prev.map((g,i)=>i===idx?game:g) : [game,...prev];
-      saveGamesLocal(next);
+      saveGamesLocal(next, user?.id);
       return next;
     });
     // Sync para nuvem: debounce de 4s para não disparar a cada ação durante o jogo
@@ -1970,7 +1983,13 @@ export default function App() {
         </div>
         <div className="home-user-bar">
           <span className="home-user-email">{user.email}</span>
-          <button className="home-logout-btn" onClick={async()=>{await signOut();setUser(null);setGames([]);}}>
+          <button className="home-logout-btn" onClick={async()=>{
+              await signOut();
+              setUser(null);
+              setGames([]);
+              setSavedTeams([]);
+              setTeamsSyncStatus('');
+            }}>
             Sair
           </button>
         </div>
@@ -1996,7 +2015,7 @@ export default function App() {
                   (imported) => {
                     setGames(prev => {
                       const next = [imported, ...prev];
-                      saveGamesLocal(next);
+                      saveGamesLocal(next, user?.id);
                       if (user) upsertGame(imported, user.id).catch(() => {});
                       return next;
                     });
@@ -2020,7 +2039,7 @@ export default function App() {
                     e.stopPropagation();
                     if(!window.confirm('Excluir este jogo?'))return;
                     await deleteGame(g.id).catch(()=>{});
-                    setGames(prev=>{const n=prev.filter(x=>x.id!==g.id);saveGamesLocal(n);return n;});
+                    setGames(prev=>{const n=prev.filter(x=>x.id!==g.id);saveGamesLocal(n,user?.id);return n;});
                   }}>✕</button>}
                 <div className="game-card-teams">
                   <span>{g.teams[0].name}</span>
