@@ -18,13 +18,8 @@ export default async function handler(req, res) {
   const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(token);
   if (authErr || !user) return res.status(401).json({ error: 'Token inválido' });
 
-  // Verificar is_admin usando service role (bypassa RLS)
   const { data: profile, error: profErr } = await supabaseAdmin
-    .from('profiles')
-    .select('is_admin')
-    .eq('id', user.id)
-    .single();
-
+    .from('profiles').select('is_admin').eq('id', user.id).single();
   if (profErr) return res.status(500).json({ error: 'Erro ao verificar perfil', detail: profErr.message });
   if (!profile?.is_admin) return res.status(403).json({ error: 'Não é admin' });
 
@@ -35,11 +30,16 @@ export default async function handler(req, res) {
   const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email);
   if (error) return res.status(400).json({ error: error.message });
 
-  // Criar perfil para o novo usuário
-  await supabaseAdmin
-    .from('profiles')
-    .upsert({ id: data.user.id, is_admin: false })
-    .catch(() => {});
+  // Tentar criar perfil — erro aqui não deve quebrar o retorno
+  // (o perfil pode ser criado depois quando o usuário ativar a conta)
+  try {
+    await supabaseAdmin
+      .from('profiles')
+      .upsert({ id: data.user.id, is_admin: false }, { onConflict: 'id', ignoreDuplicates: true });
+  } catch (e) {
+    console.warn('Perfil não criado agora, será criado no primeiro login:', e.message);
+  }
 
+  // Retorna sucesso independente do perfil
   return res.status(200).json({ success: true, email: data.user.email });
 }
