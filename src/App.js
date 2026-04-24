@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
-import { supabase, signIn, signUp, signOut, onAuthChange, fetchGames, upsertGame, deleteGame, fetchTeams, upsertTeam, deleteTeam, adminListUsers, adminInviteUser, adminResetPass, adminToggleBan, checkIsAdmin } from './supabase';
+import { supabase, signIn, signUp, signOut, onAuthChange, fetchGames, upsertGame, deleteGame, fetchTeams, upsertTeam, deleteTeam, adminListUsers, adminInviteUser, adminResetPassword, adminToggleBan } from './supabase';
 
 const BASE_QUARTERS = ['1Q', '2Q', '3Q', '4Q'];
 const getQuarterLabel = (q) => q < 4 ? BASE_QUARTERS[q] : `OT${q - 3}`;
@@ -967,7 +967,7 @@ function AdminScreen({ onClose }) {
   const handleReset = async (email) => {
     setActionLoading(`reset_${email}`);
     try {
-      await adminResetPass(email);
+      await adminResetPassword(email);
       showMsg(`E-mail de reset enviado para ${email}`);
     } catch(e) { showMsg(e.message, 'error'); }
     setActionLoading(null);
@@ -1479,7 +1479,9 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     // ── Verificar se é admin ──
-    checkIsAdmin(user.id).then(admin => setIsAdmin(admin)).catch(() => {});
+    supabase.from('profiles').select('is_admin').eq('id', user.id).single()
+      .then(({ data: p }) => setIsAdmin(p?.is_admin || false))
+      .catch(() => setIsAdmin(false));
 
     // ── Jogos: local primeiro, nuvem depois ──
     const localGames = loadGamesLocal(user.id);

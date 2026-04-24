@@ -7,8 +7,8 @@ import { createClient } from '@supabase/supabase-js';
 //   REACT_APP_SUPABASE_ANON_KEY = eyJ...sua chave anon...
 //
 // Opção 2 (simples): cole diretamente abaixo
-const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL || 'https://tpgkhtayyfnntxilwcvu.supabase.co';
-const SUPABASE_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRwZ2todGF5eWZubnR4aWx3Y3Z1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3OTk5MjcsImV4cCI6MjA5MjM3NTkyN30.dTgmf2rUTzS1tThFQszgrLmguDAfo-WofkPYq5fbFrw';
+const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL || 'https://SEU_PROJETO.supabase.co';
+const SUPABASE_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJSUA_CHAVE_AQUI';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
