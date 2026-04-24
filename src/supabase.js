@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 // ─── SUBSTITUA AQUI ──────────────────────────────────────────────────────────
-const SUPABASE_URL  = 'https://tpgkhtayyfnntxilwcvu.supabase.co';   // ← cole sua Project URL
-const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRwZ2todGF5eWZubnR4aWx3Y3Z1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3OTk5MjcsImV4cCI6MjA5MjM3NTkyN30.dTgmf2rUTzS1tThFQszgrLmguDAfo-WofkPYq5fbFrw';                 // ← cole sua anon public key
+const SUPABASE_URL  = 'https://SEU_PROJETO.supabase.co';   // ← cole sua Project URL
+const SUPABASE_KEY  = 'eyJSUA_CHAVE_AQUI';                 // ← cole sua anon public key
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Cria o cliente com persistência de sessão explícita
@@ -98,6 +98,39 @@ export async function upsertTeam(team, userId) {
       players: team.players,
     }, { onConflict: 'id' });
   if (error) console.error('upsertTeam error:', error.message);
+}
+
+// ── Admin API calls (via Vercel Serverless) ──────────────────────────────────
+async function adminFetch(endpoint, method='GET', body=null) {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error('Sem sessão ativa');
+
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+  };
+  if (body) opts.body = JSON.stringify(body);
+
+  const resp = await fetch(`/api/${endpoint}`, opts);
+  const json = await resp.json();
+  if (!resp.ok) throw new Error(json.error || 'Erro na API');
+  return json;
+}
+
+export const adminListUsers    = ()               => adminFetch('list-users');
+export const adminInviteUser   = (email)          => adminFetch('invite-user', 'POST', { email });
+export const adminResetPass    = (email)          => adminFetch('reset-password', 'POST', { email });
+export const adminToggleBan    = (targetUserId, ban) => adminFetch('toggle-ban', 'POST', { targetUserId, ban });
+
+// Verificar se o usuário atual é admin
+export async function checkIsAdmin(userId) {
+  const { data } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', userId)
+    .single();
+  return data?.is_admin === true;
 }
 
 export async function deleteTeam(teamId) {

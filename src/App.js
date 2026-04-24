@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
-import { supabase, signIn, signUp, signOut, onAuthChange, fetchGames, upsertGame, deleteGame, fetchTeams, upsertTeam, deleteTeam } from './supabase';
+import { supabase, signIn, signUp, signOut, onAuthChange, fetchGames, upsertGame, deleteGame, fetchTeams, upsertTeam, deleteTeam, adminListUsers, adminInviteUser, adminResetPass, adminToggleBan, checkIsAdmin } from './supabase';
 
 const BASE_QUARTERS = ['1Q', '2Q', '3Q', '4Q'];
 const getQuarterLabel = (q) => q < 4 ? BASE_QUARTERS[q] : `OT${q - 3}`;
@@ -928,6 +928,155 @@ function LoginScreen({ onLogin }) {
 }
 
 
+
+// ─── AdminScreen ──────────────────────────────────────────────────────────────
+function AdminScreen({ onClose }) {
+  const [users, setUsers]       = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [msg, setMsg]           = useState({ text:'', type:'' });
+  const [actionLoading, setActionLoading] = useState(null);
+
+  const showMsg = (text, type='ok') => {
+    setMsg({ text, type });
+    setTimeout(() => setMsg({ text:'', type:'' }), 4000);
+  };
+
+  const load = () => {
+    setLoading(true);
+    adminListUsers()
+      .then(data => { setUsers(data.users || []); setLoading(false); })
+      .catch(e => { showMsg(e.message, 'error'); setLoading(false); });
+  };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, []);
+
+  const handleInvite = async () => {
+    if (!inviteEmail.trim()) return;
+    setActionLoading('invite');
+    try {
+      await adminInviteUser(inviteEmail.trim());
+      showMsg(`Convite enviado para ${inviteEmail}`);
+      setInviteEmail('');
+      load();
+    } catch(e) { showMsg(e.message, 'error'); }
+    setActionLoading(null);
+  };
+
+  const handleReset = async (email) => {
+    setActionLoading(`reset_${email}`);
+    try {
+      await adminResetPass(email);
+      showMsg(`E-mail de reset enviado para ${email}`);
+    } catch(e) { showMsg(e.message, 'error'); }
+    setActionLoading(null);
+  };
+
+  const handleToggleBan = async (u) => {
+    const action = u.banned ? 'desbloquear' : 'bloquear';
+    if (!window.confirm(`${action.charAt(0).toUpperCase()+action.slice(1)} ${u.email}?`)) return;
+    setActionLoading(`ban_${u.id}`);
+    try {
+      await adminToggleBan(u.id, !u.banned);
+      showMsg(`Usuário ${u.banned ? 'desbloqueado' : 'bloqueado'} com sucesso`);
+      load();
+    } catch(e) { showMsg(e.message, 'error'); }
+    setActionLoading(null);
+  };
+
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{maxWidth:'640px'}}>
+        <div className="modal-header">
+          <span>⚙ Gerenciar Usuários</span>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body" style={{maxHeight:'72vh',overflowY:'auto'}}>
+
+          {/* Mensagem de feedback */}
+          {msg.text && (
+            <div className={`teams-sync-banner ${msg.type==='error'?'error':'saved'}`}
+              style={{marginBottom:'12px'}}>
+              {msg.type==='error'?'✗':'✓'} {msg.text}
+            </div>
+          )}
+
+          {/* Convidar novo usuário */}
+          <div className="admin-invite-box">
+            <div style={{fontWeight:700,color:'var(--text)',marginBottom:'8px',fontSize:'14px'}}>
+              Convidar novo usuário
+            </div>
+            <div style={{display:'flex',gap:'8px'}}>
+              <input className="login-input" type="email" placeholder="e-mail do novo usuário"
+                value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)}
+                onKeyDown={e=>e.key==='Enter'&&handleInvite()}
+                style={{flex:1,margin:0}}/>
+              <button className="btn-start"
+                style={{width:'auto',padding:'10px 18px',fontSize:'14px',whiteSpace:'nowrap'}}
+                onClick={handleInvite}
+                disabled={actionLoading==='invite'||!inviteEmail.trim()}>
+                {actionLoading==='invite'?'Enviando...':'Convidar →'}
+              </button>
+            </div>
+            <div style={{fontSize:'12px',color:'var(--muted)',marginTop:'6px'}}>
+              O usuário receberá um e-mail com link para definir a senha.
+            </div>
+          </div>
+
+          {/* Lista de usuários */}
+          <div style={{marginTop:'16px'}}>
+            <div style={{fontWeight:700,color:'var(--text)',marginBottom:'8px',fontSize:'14px',display:'flex',alignItems:'center',gap:'8px'}}>
+              Usuários cadastrados
+              <button onClick={load} style={{background:'none',border:'none',color:'var(--muted)',cursor:'pointer',fontSize:'16px'}} title="Atualizar">↻</button>
+            </div>
+
+            {loading && <div style={{color:'var(--muted)',textAlign:'center',padding:'20px'}}>Carregando...</div>}
+
+            {!loading && users.length === 0 && (
+              <div style={{color:'var(--muted)',textAlign:'center',padding:'20px'}}>Nenhum usuário encontrado.</div>
+            )}
+
+            {!loading && users.map(u => (
+              <div key={u.id} className={`admin-user-row${u.banned?' banned':''}`}>
+                <div className="admin-user-info">
+                  <div className="admin-user-email">
+                    {u.email}
+                    {u.is_admin && <span className="admin-badge">ADM</span>}
+                    {!u.confirmed && <span className="admin-badge pending">Pendente</span>}
+                    {u.banned && <span className="admin-badge banned">Bloqueado</span>}
+                  </div>
+                  <div className="admin-user-meta">
+                    Cadastro: {fmtDate(u.created_at)}
+                    {u.last_sign_in && ` · Último acesso: ${fmtDate(u.last_sign_in)}`}
+                  </div>
+                </div>
+                <div className="admin-user-actions">
+                  <button className="admin-action-btn reset"
+                    onClick={() => handleReset(u.email)}
+                    disabled={!!actionLoading}
+                    title="Enviar e-mail de redefinição de senha">
+                    {actionLoading===`reset_${u.email}` ? '...' : '🔑 Reset'}
+                  </button>
+                  {!u.is_admin && (
+                    <button className={`admin-action-btn ${u.banned?'unban':'ban'}`}
+                      onClick={() => handleToggleBan(u)}
+                      disabled={!!actionLoading}>
+                      {actionLoading===`ban_${u.id}` ? '...' : u.banned ? '✓ Desbloquear' : '✗ Bloquear'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── TeamsScreen ──────────────────────────────────────────────────────────────
 function TeamsScreen({ teams, onSave, syncStatus, onClose }) {
   const [list, setList]       = useState(teams.map(t => ({ ...t, players: t.players.map(p => ({ ...p })) })));
@@ -1225,6 +1374,8 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('wf_teams')||'[]'); } catch { return []; }
   });
   const [showTeams, setShowTeams]         = useState(false);
+  const [isAdmin, setIsAdmin]             = useState(false);
+  const [showAdmin, setShowAdmin]         = useState(false);
   const [teamsSyncStatus, setTeamsSyncStatus] = useState(''); // ''|'syncing'|'saved'|'pending'|'error'
   const [game, setGame]     = useState(null);
   const [running, setRunning] = useState(false);
@@ -1318,6 +1469,7 @@ export default function App() {
         setSavedTeams([]);
         setGames([]);
         setTeamsSyncStatus('');
+        setIsAdmin(false);
       }
     });
     return () => subscription.unsubscribe();
@@ -1326,6 +1478,9 @@ export default function App() {
   // ── Carrega jogos e times do Supabase quando usuário loga ──────────────────
   useEffect(() => {
     if (!user) return;
+    // ── Verificar se é admin ──
+    checkIsAdmin(user.id).then(admin => setIsAdmin(admin)).catch(() => {});
+
     // ── Jogos: local primeiro, nuvem depois ──
     const localGames = loadGamesLocal(user.id);
     if (localGames.length > 0) setGames(localGames);
@@ -1967,6 +2122,7 @@ export default function App() {
     <div className="app">
       {showNewGame && <NewGameModal onStart={startGame} onClose={()=>setShowNewGame(false)} savedTeams={savedTeams}/>}
       {showTeams && <TeamsScreen teams={savedTeams} onSave={saveTeams} syncStatus={teamsSyncStatus} onClose={()=>setShowTeams(false)}/>}
+      {showAdmin && <AdminScreen onClose={()=>setShowAdmin(false)}/>}
       <div className="home-screen">
         <div className="home-logo">
           <div className="logo-ball">
@@ -1995,6 +2151,10 @@ export default function App() {
         </div>
         <div style={{display:'flex',gap:'10px',width:'100%',maxWidth:'360px'}}>
           <button className="btn-new-game" style={{flex:2}} onClick={()=>setShowNewGame(true)}>+ Novo Jogo</button>
+          {isAdmin && (
+            <button className="btn-teams" style={{background:'rgba(250,233,42,.1)',borderColor:'rgba(250,233,42,.4)',color:'var(--accent)'}}
+              onClick={()=>setShowAdmin(true)} title="Gerenciar usuários">⚙</button>
+          )}
           <button className="btn-teams" onClick={()=>setShowTeams(true)}>
             ⚑ Meus Times
             {teamsSyncStatus==='pending' && <span className="teams-sync-dot pending" title="Times com alterações não salvas na nuvem">●</span>}
