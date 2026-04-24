@@ -838,50 +838,25 @@ function HeatMap({ shots, teamName, attackDir, teamIdx=0, homeAttackRight=true }
 }
 
 
-// ─── LoginScreen ──────────────────────────────────────────────────────────────
-function LoginScreen({ onLogin }) {
-  const [mode, setMode]       = useState('login'); // 'login' | 'signup'
-  const [email, setEmail]     = useState('');
+// ─── ResetPasswordScreen ─────────────────────────────────────────────────────
+// Aparece quando usuário clica no link de redefinição de senha do e-mail
+function ResetPasswordScreen() {
   const [pass, setPass]       = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError]     = useState('');
+  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handle = async () => {
+    if (pass.length < 6)    { setError('Senha mínima: 6 caracteres.'); return; }
+    if (pass !== confirm)   { setError('As senhas não coincidem.'); return; }
     setError(''); setLoading(true);
-    try {
-      if (mode === 'signup') {
-        if (pass !== confirm) { setError('As senhas não coincidem.'); setLoading(false); return; }
-        if (pass.length < 6)  { setError('Senha mínima: 6 caracteres.'); setLoading(false); return; }
-        const { error: e } = await signUp(email, pass);
-        if (e) throw e;
-        setError('Confirme seu e-mail antes de entrar.');
-        setMode('login');
-      } else {
-        const { error: e } = await signIn(email, pass);
-        if (e) throw e;
-        // onLogin será chamado pelo onAuthChange listener no App
-      }
-    } catch (e) {
-      const msgs = {
-        'Invalid login credentials': 'E-mail ou senha incorretos.',
-        'Email not confirmed': 'Confirme seu e-mail antes de entrar.',
-        'User already registered': 'E-mail já cadastrado.',
-        'Failed to fetch': '⚠️ Sem conexão com o servidor de autenticação. Verifique sua internet ou tente pelo hotspot do celular.',
-        'Load failed': '⚠️ Sem conexão com o servidor de autenticação. Verifique sua internet ou tente pelo hotspot do celular.',
-        'NetworkError when attempting to fetch resource': '⚠️ Rede bloqueando a autenticação. Tente pelo hotspot do celular.',
-      };
-      // Erros de rede geralmente contêm "fetch" na mensagem
-      const isNetworkError = e.message?.toLowerCase().includes('fetch') ||
-                             e.message?.toLowerCase().includes('network') ||
-                             e.message?.toLowerCase().includes('failed');
-      if (isNetworkError) {
-        setError('⚠️ Não foi possível conectar ao servidor. Sua rede pode estar bloqueando o acesso. Tente pelo hotspot do celular ou em outra rede.');
-      } else {
-        setError(msgs[e.message] || e.message);
-      }
-    }
+    const { error: e } = await supabase.auth.updateUser({ password: pass });
     setLoading(false);
+    if (e) { setError(e.message); return; }
+    setSuccess(true);
+    // Redireciona para home após 2s
+    setTimeout(() => { window.location.hash = ''; window.location.reload(); }, 2000);
   };
 
   return (
@@ -900,30 +875,148 @@ function LoginScreen({ onLogin }) {
             <div className="login-subtitle">Basketball Scout</div>
           </div>
         </div>
-
-        <div className="login-tabs">
-          <button className="login-tab" data-active={mode==='login'} onClick={()=>{setMode('login');setError('');}}>Entrar</button>
-          <button className="login-tab" data-active={mode==='signup'} onClick={()=>{setMode('signup');setError('');}}>Cadastrar</button>
+        <div style={{textAlign:'center',marginBottom:'4px'}}>
+          <div style={{fontFamily:'var(--fd)',fontSize:'18px',fontWeight:700,color:'var(--text)'}}>
+            Redefinir senha
+          </div>
+          <div style={{fontSize:'13px',color:'var(--muted)',marginTop:'4px'}}>
+            Digite sua nova senha abaixo
+          </div>
         </div>
+        {success ? (
+          <div className="teams-sync-banner saved">
+            ✓ Senha redefinida com sucesso! Redirecionando...
+          </div>
+        ) : (
+          <>
+            <div className="login-fields">
+              <input className="login-input" type="password" placeholder="Nova senha"
+                value={pass} onChange={e=>setPass(e.target.value)}
+                onKeyDown={e=>e.key==='Enter'&&handle()}/>
+              <input className="login-input" type="password" placeholder="Confirmar nova senha"
+                value={confirm} onChange={e=>setConfirm(e.target.value)}
+                onKeyDown={e=>e.key==='Enter'&&handle()}/>
+            </div>
+            {error && <div className="login-error">{error}</div>}
+            <button className="login-btn" onClick={handle} disabled={loading||!pass||!confirm}>
+              {loading ? 'Salvando...' : 'Salvar nova senha'}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
+// ─── LoginScreen ──────────────────────────────────────────────────────────────
+function LoginScreen({ onLogin }) {
+  const [mode, setMode]   = useState('login'); // 'login' | 'forgot'
+  const [email, setEmail] = useState('');
+  const [pass, setPass]   = useState('');
+  const [error, setError] = useState('');
+  const [info, setInfo]   = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    setError(''); setInfo(''); setLoading(true);
+    try {
+      const { error: e } = await signIn(email, pass);
+      if (e) throw e;
+    } catch (e) {
+      const isNetworkError = e.message?.toLowerCase().includes('fetch') ||
+                             e.message?.toLowerCase().includes('network') ||
+                             e.message?.toLowerCase().includes('failed');
+      if (isNetworkError) {
+        setError('⚠️ Sem conexão com o servidor. Tente pelo hotspot do celular ou outra rede.');
+      } else {
+        const msgs = {
+          'Invalid login credentials': 'E-mail ou senha incorretos.',
+          'Email not confirmed': 'Confirme seu e-mail antes de entrar.',
+        };
+        setError(msgs[e.message] || e.message);
+      }
+    }
+    setLoading(false);
+  };
+
+  const handleForgot = async () => {
+    if (!email) { setError('Digite seu e-mail primeiro.'); return; }
+    setError(''); setInfo(''); setLoading(true);
+    const { error: e } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    setLoading(false);
+    if (e) { setError(e.message); return; }
+    setInfo('✓ E-mail de redefinição enviado. Verifique sua caixa de entrada.');
+  };
+
+  const Logo = () => (
+    <div className="login-logo">
+      <svg viewBox="0 0 60 60" width="52" height="52">
+        <circle cx="30" cy="30" r="28" fill="#f97316" stroke="#c2530a" strokeWidth="1"/>
+        <path d="M30 2 Q30 30 30 58" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
+        <path d="M2 30 Q30 30 58 30" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
+        <path d="M8 12 Q20 22 30 30 Q40 38 52 48" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
+        <path d="M52 12 Q40 22 30 30 Q20 38 8 48" fill="none" stroke="#c2530a" strokeWidth="1.5"/>
+      </svg>
+      <div>
+        <div className="login-title">WinFast</div>
+        <div className="login-subtitle">Basketball Scout</div>
+      </div>
+    </div>
+  );
+
+  // Tela: esqueci a senha
+  if (mode === 'forgot') {
+    return (
+      <div className="login-screen">
+        <div className="login-box">
+          <Logo/>
+          <div style={{textAlign:'center'}}>
+            <div style={{fontFamily:'var(--fd)',fontSize:'16px',fontWeight:700,color:'var(--text)'}}>Esqueci minha senha</div>
+            <div style={{fontSize:'12px',color:'var(--muted)',marginTop:'4px'}}>
+              Enviaremos um link de redefinição para o seu e-mail.
+            </div>
+          </div>
+          <div className="login-fields">
+            <input className="login-input" type="email" placeholder="Seu e-mail"
+              value={email} onChange={e=>setEmail(e.target.value)}
+              onKeyDown={e=>e.key==='Enter'&&handleForgot()}/>
+          </div>
+          {error && <div className="login-error">{error}</div>}
+          {info  && <div className="teams-sync-banner saved">{info}</div>}
+          <button className="login-btn" onClick={handleForgot} disabled={loading||!email}>
+            {loading ? 'Enviando...' : 'Enviar link de redefinição'}
+          </button>
+          <button onClick={()=>{setMode('login');setError('');setInfo('');}}
+            style={{background:'none',border:'none',color:'var(--muted)',fontSize:'13px',cursor:'pointer',padding:'4px'}}>
+            ← Voltar ao login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Tela: login normal
+  return (
+    <div className="login-screen">
+      <div className="login-box">
+        <Logo/>
         <div className="login-fields">
           <input className="login-input" type="email" placeholder="E-mail"
             value={email} onChange={e=>setEmail(e.target.value)}
-            onKeyDown={e=>e.key==='Enter'&&handle()}/>
+            onKeyDown={e=>e.key==='Enter'&&handleLogin()}/>
           <input className="login-input" type="password" placeholder="Senha"
             value={pass} onChange={e=>setPass(e.target.value)}
-            onKeyDown={e=>e.key==='Enter'&&handle()}/>
-          {mode==='signup' && (
-            <input className="login-input" type="password" placeholder="Confirmar senha"
-              value={confirm} onChange={e=>setConfirm(e.target.value)}
-              onKeyDown={e=>e.key==='Enter'&&handle()}/>
-          )}
+            onKeyDown={e=>e.key==='Enter'&&handleLogin()}/>
         </div>
-
         {error && <div className="login-error">{error}</div>}
-
-        <button className="login-btn" onClick={handle} disabled={loading||!email||!pass}>
-          {loading ? 'Aguarde...' : mode==='login' ? 'Entrar' : 'Criar conta'}
+        <button className="login-btn" onClick={handleLogin} disabled={loading||!email||!pass}>
+          {loading ? 'Entrando...' : 'Entrar'}
+        </button>
+        <button onClick={()=>{setMode('forgot');setError('');setInfo('');}}
+          style={{background:'none',border:'none',color:'var(--muted)',fontSize:'13px',cursor:'pointer',padding:'4px',textDecoration:'underline'}}>
+          Esqueci minha senha
         </button>
       </div>
     </div>
@@ -1502,7 +1595,7 @@ export default function App() {
       setAuthLoading(false);
     });
     // Escuta mudanças de auth (login/logout)
-    const { data: { subscription } } = onAuthChange((_event, session) => {
+    const { data: { subscription } } = onAuthChange((event, session) => {
       const newUser = session?.user ?? null;
       setUser(newUser);
       setAuthLoading(false);
@@ -2159,6 +2252,14 @@ export default function App() {
       </div>
     </div>
   );
+
+  // Detectar tipo de link do e-mail (recovery, invite) pelo hash da URL
+  const hashParams = new URLSearchParams(window.location.hash.replace('#',''));
+  const urlType    = hashParams.get('type');
+  const urlError   = hashParams.get('error');
+
+  // Link de redefinição de senha → tela de nova senha
+  if (urlType === 'recovery' && !urlError) return <ResetPasswordScreen/>;
 
   // Tela de login se não autenticado
   if (!user) return <LoginScreen onLogin={u => setUser(u)} />;
