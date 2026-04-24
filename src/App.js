@@ -1298,29 +1298,26 @@ function NewGameModal({ onStart, onClose, savedTeams = [] }) {
             ))}
           </div>
 
-          {/* Data */}
+          {/* Data + Tipo do jogo — mesma linha */}
           <div style={{marginTop:12}}>
-            <div style={{marginBottom:6,fontWeight:'bold',color:'var(--text)'}}>Data do jogo:</div>
-            <input className="login-input" type="text" placeholder="DD/MM/AAAA"
-              value={gameDate} maxLength={10}
-              onChange={e => {
-                let v = e.target.value.replace(/\D/g,'');
-                if (v.length > 2) v = v.slice(0,2)+'/'+v.slice(2);
-                if (v.length > 5) v = v.slice(0,5)+'/'+v.slice(5,9);
-                setGameDate(v);
-              }}
-              style={{width:'100%',boxSizing:'border-box',marginBottom:0}}/>
-          </div>
-
-          {/* Tipo do jogo */}
-          <div style={{marginTop:12}}>
-            <div style={{marginBottom:6,fontWeight:'bold',color:'var(--text)'}}>Tipo do jogo:</div>
-            <div style={{display:'flex',gap:'8px',marginBottom: gameType==='competicao' ? '8px' : '0'}}>
+            <div style={{marginBottom:6,fontWeight:'bold',color:'var(--text)'}}>Data e tipo do jogo:</div>
+            <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
+              {/* Data compacta */}
+              <input className="login-input" type="text" placeholder="DD/MM/AAAA"
+                value={gameDate} maxLength={10}
+                onChange={e => {
+                  let v = e.target.value.replace(/\D/g,'');
+                  if (v.length > 2) v = v.slice(0,2)+'/'+v.slice(2);
+                  if (v.length > 5) v = v.slice(0,5)+'/'+v.slice(5,9);
+                  setGameDate(v);
+                }}
+                style={{width:'130px',flexShrink:0,margin:0}}/>
+              {/* Tipo: Amistoso / Competição */}
               <button type="button"
                 style={{flex:1,padding:'10px',borderRadius:'6px',border:'1px solid var(--border)',cursor:'pointer',
                   background:gameType==='amistoso'?'var(--accent)':'var(--bg3)',
                   color:gameType==='amistoso'?'var(--accent-text)':'var(--text)',
-                  fontFamily:'var(--fd)',fontWeight:700}}
+                  fontFamily:'var(--fd)',fontWeight:700,fontSize:'13px'}}
                 onClick={()=>setGameType('amistoso')}>
                 Amistoso
               </button>
@@ -1328,17 +1325,18 @@ function NewGameModal({ onStart, onClose, savedTeams = [] }) {
                 style={{flex:1,padding:'10px',borderRadius:'6px',border:'1px solid var(--border)',cursor:'pointer',
                   background:gameType==='competicao'?'var(--accent)':'var(--bg3)',
                   color:gameType==='competicao'?'var(--accent-text)':'var(--text)',
-                  fontFamily:'var(--fd)',fontWeight:700}}
+                  fontFamily:'var(--fd)',fontWeight:700,fontSize:'13px'}}
                 onClick={()=>setGameType('competicao')}>
                 Competição
               </button>
             </div>
+            {/* Nome da competição — só aparece quando Competição selecionado */}
             {gameType==='competicao' && (
               <input className="login-input" type="text"
                 placeholder="Nome da competição (ex: Campeonato Estadual)"
                 value={competitionName}
                 onChange={e=>setCompetitionName(e.target.value)}
-                style={{width:'100%',boxSizing:'border-box',marginTop:0}}/>
+                style={{width:'100%',boxSizing:'border-box',marginTop:'8px'}}/>
             )}
           </div>
 
