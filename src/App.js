@@ -91,16 +91,17 @@ function dl(content, filename) {
 function exportStatsCSV(game) {
   const d = game.gameDate || game.date || '';
   const matchup = `${game.teams[0].name} vs ${game.teams[1].name}`;
-  const lines = [`Data,Jogo,Numero,Atleta,Time,MIN,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG%,FG3M,FG3A,3P%,FTM,FTA,LL%,FALTAS,FALTAS.SOF,+/-,PIR,POSSES.ATL`];
+  const tipo = game.gameType === 'competicao' ? (game.competitionName||'Competição') : 'Amistoso';
+  const lines = [`Data,Tipo,Jogo,Numero,Atleta,Time,MIN,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG%,FG3M,FG3A,3P%,FTM,FTA,LL%,FALTAS,FALTAS.SOF,+/-,PIR,POSSES.ATL`];
   game.teams.forEach((t, ti) => {
     t.players.forEach(p => {
       const pm = (p.plusMinus||0) >= 0 ? `+${p.plusMinus||0}` : `${p.plusMinus||0}`;
       const min = `${Math.floor((p.timeOnCourt||0)/60)}:${String(Math.round((p.timeOnCourt||0)%60)).padStart(2,'0')}`;
-      lines.push(`"${d}","${matchup}","${p.number}","${p.name}","${t.name}",${min},${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${p.fg3m},${p.fg3a},${pct(p.fg3m,p.fg3a)},${p.ftm},${p.fta},${pct(p.ftm,p.fta)},${p.fouls},${p.foulsReceived||0},${pm},${calcPIR(p)},${p.possessions||0}`);
+      lines.push(`"${d}","${tipo}","${matchup}","${p.number}","${p.name}","${t.name}",${min},${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${p.fg3m},${p.fg3a},${pct(p.fg3m,p.fg3a)},${p.ftm},${p.fta},${pct(p.ftm,p.fta)},${p.fouls},${p.foulsReceived||0},${pm},${calcPIR(p)},${p.possessions||0}`);
     });
     const tot = totals(t);
     const teamPoss = (game.possessions||[0,0])[ti]||0;
-    lines.push(`"${d}","${matchup}","","TOTAL","${t.name}",,${tot.pts},${tot.ast},${tot.reb},${tot.oreb},${tot.stl},${tot.blk},${tot.to},${tot.fg2m},${tot.fg2a},${pct(tot.fg2m+tot.fg3m,tot.fg2a+tot.fg3a)},${tot.fg3m},${tot.fg3a},${pct(tot.fg3m,tot.fg3a)},${tot.ftm},${tot.fta},${pct(tot.ftm,tot.fta)},${tot.fouls},,,,${teamPoss}`);
+    lines.push(`"${d}","${tipo}","${matchup}","","TOTAL","${t.name}",,${tot.pts},${tot.ast},${tot.reb},${tot.oreb},${tot.stl},${tot.blk},${tot.to},${tot.fg2m},${tot.fg2a},${pct(tot.fg2m+tot.fg3m,tot.fg2a+tot.fg3a)},${tot.fg3m},${tot.fg3a},${pct(tot.fg3m,tot.fg3a)},${tot.ftm},${tot.fta},${pct(tot.ftm,tot.fta)},${tot.fouls},,,,${teamPoss}`);
   });
   dl(lines.join('\n'), `stats_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
@@ -108,13 +109,14 @@ function exportStatsCSV(game) {
 function exportLogCSV(game) {
   const d = game.gameDate || game.date || '';
   const matchup = `${game.teams[0].name} vs ${game.teams[1].name}`;
-  const lines = ['Data,Jogo,Quarto,Tempo,Time,Numero,Atleta,Acao,Pontos'];
+  const tipo = game.gameType === 'competicao' ? (game.competitionName||'Competição') : 'Amistoso';
+  const lines = ['Data,Tipo,Jogo,Quarto,Tempo,Time,Numero,Atleta,Acao,Pontos'];
   game.log.forEach(e => {
     // Separa "#07 Costa" em numero="07" e nome="Costa"
     const playerParts = (e.player||'').match(/^#?([\w]+)\s+(.+)$/);
     const pNum  = playerParts ? playerParts[1] : '';
     const pName = playerParts ? playerParts[2] : (e.player||'');
-    lines.push(`"${d}","${matchup}","${e.q}","${e.time}","${e.team}","${pNum}","${pName}","${e.action}",${e.pts}`);
+    lines.push(`"${d}","${tipo}","${matchup}","${e.q}","${e.time}","${e.team}","${pNum}","${pName}","${e.action}",${e.pts}`);
   });
   dl(lines.join('\n'), `log_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
@@ -153,11 +155,12 @@ function exportGameJSON(game) {
 function exportShotsCSV(game) {
   const d = game.gameDate || game.date || '';
   const matchup = `${game.teams[0].name} vs ${game.teams[1].name}`;
-  const lines = ['Data,Jogo,Numero,Atleta,Time,Quarto,Tempo,X_pct,Y_pct,Convertido,Zona,Subtipo,Assistencia'];
+  const tipo = game.gameType === 'competicao' ? (game.competitionName||'Competição') : 'Amistoso';
+  const lines = ['Data,Tipo,Jogo,Numero,Atleta,Time,Quarto,Tempo,X_pct,Y_pct,Convertido,Zona,Subtipo,Assistencia'];
   game.teams.forEach(t => t.players.forEach(p =>
     (p.shots||[]).forEach(s => {
       const subtipo = s.three ? 'Arremesso' : (s.shotType && s.shotType !== '3pts' ? s.shotType : 'Arremesso');
-      lines.push(`"${d}","${matchup}","${p.number}","${p.name}","${t.name}","${s.q||''}","${s.time||''}",${s.x.toFixed(2)},${s.y.toFixed(2)},${s.made?'Sim':'Não'},${s.three?'3pts':'2pts'},"${subtipo}","${s.assistedBy||''}"`);
+      lines.push(`"${d}","${tipo}","${matchup}","${p.number}","${p.name}","${t.name}","${s.q||''}","${s.time||''}",${s.x.toFixed(2)},${s.y.toFixed(2)},${s.made?'Sim':'Não'},${s.three?'3pts':'2pts'},"${subtipo}","${s.assistedBy||''}"`);
     })));
   dl(lines.join('\n'), `arremessos_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
@@ -1045,12 +1048,16 @@ function AdminScreen({ onClose }) {
                   <div className="admin-user-email">
                     {u.email}
                     {u.is_admin && <span className="admin-badge">ADM</span>}
-                    {!u.confirmed && <span className="admin-badge pending">Pendente</span>}
+                    {!u.email_confirmed_at && <span className="admin-badge pending">Pendente</span>}
                     {u.banned && <span className="admin-badge banned">Bloqueado</span>}
                   </div>
                   <div className="admin-user-meta">
-                    Cadastro: {fmtDate(u.created_at)}
-                    {u.last_sign_in && ` · Último acesso: ${fmtDate(u.last_sign_in)}`}
+                    <span title="Data de criação da conta">📅 Criação: {fmtDate(u.created_at)}</span>
+                    <span style={{margin:'0 6px',color:'var(--border)'}}>|</span>
+                    <span title="Último login">🕐 Último login: {fmtDate(u.last_sign_in_at)}</span>
+                    {!u.email_confirmed_at && (
+                      <span style={{marginLeft:'6px',color:'#f59e0b'}}>⚠ E-mail não confirmado</span>
+                    )}
                   </div>
                 </div>
                 <div className="admin-user-actions">
@@ -1217,6 +1224,8 @@ function NewGameModal({ onStart, onClose, savedTeams = [] }) {
   const today = new Date();
   const todayStr = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
   const [gameDate, setGameDate] = useState(todayStr);
+  const [gameType, setGameType]         = useState('amistoso'); // 'amistoso' | 'competicao'
+  const [competitionName, setCompetitionName] = useState('');
   const [players, setPlayers] = useState({
     a: Array.from({length:5}, BLANK_PLAYER),
     b: Array.from({length:5}, BLANK_PLAYER),
@@ -1244,7 +1253,11 @@ function NewGameModal({ onStart, onClose, savedTeams = [] }) {
       alert(`Cada time precisa ter ao menos 5 jogadores.\n${rosterA.length < 5 ? nameA+' tem '+rosterA.length+' jogador(es).' : ''}\n${rosterB.length < 5 ? nameB+' tem '+rosterB.length+' jogador(es).' : ''}`);
       return;
     }
-    onStart(nameA, nameB, rosterA, rosterB, startingTeam, gameDate, homeAttackRight);
+    const gameTypeData = {
+      type: gameType,
+      competitionName: gameType === 'competicao' ? competitionName.trim() : '',
+    };
+    onStart(nameA, nameB, rosterA, rosterB, startingTeam, gameDate, homeAttackRight, gameTypeData);
   };
 
   return (
@@ -1297,6 +1310,36 @@ function NewGameModal({ onStart, onClose, savedTeams = [] }) {
                 setGameDate(v);
               }}
               style={{width:'100%',boxSizing:'border-box',marginBottom:0}}/>
+          </div>
+
+          {/* Tipo do jogo */}
+          <div style={{marginTop:12}}>
+            <div style={{marginBottom:6,fontWeight:'bold',color:'var(--text)'}}>Tipo do jogo:</div>
+            <div style={{display:'flex',gap:'8px',marginBottom: gameType==='competicao' ? '8px' : '0'}}>
+              <button type="button"
+                style={{flex:1,padding:'10px',borderRadius:'6px',border:'1px solid var(--border)',cursor:'pointer',
+                  background:gameType==='amistoso'?'var(--accent)':'var(--bg3)',
+                  color:gameType==='amistoso'?'var(--accent-text)':'var(--text)',
+                  fontFamily:'var(--fd)',fontWeight:700}}
+                onClick={()=>setGameType('amistoso')}>
+                Amistoso
+              </button>
+              <button type="button"
+                style={{flex:1,padding:'10px',borderRadius:'6px',border:'1px solid var(--border)',cursor:'pointer',
+                  background:gameType==='competicao'?'var(--accent)':'var(--bg3)',
+                  color:gameType==='competicao'?'var(--accent-text)':'var(--text)',
+                  fontFamily:'var(--fd)',fontWeight:700}}
+                onClick={()=>setGameType('competicao')}>
+                Competição
+              </button>
+            </div>
+            {gameType==='competicao' && (
+              <input className="login-input" type="text"
+                placeholder="Nome da competição (ex: Campeonato Estadual)"
+                value={competitionName}
+                onChange={e=>setCompetitionName(e.target.value)}
+                style={{width:'100%',boxSizing:'border-box',marginTop:0}}/>
+            )}
           </div>
 
           {/* Posse inicial */}
@@ -1694,13 +1737,15 @@ export default function App() {
   }, [activeTeam, selectedPlayerA, selectedPlayerB, setGameWithUndo, endPossession]);
 
   // ── startGame ───────────────────────────────────────────────────────────────
-  const startGame = (nameA, nameB, rosterA, rosterB, startingTeam, gameDate, homeAttackRight=true) => {
+  const startGame = (nameA, nameB, rosterA, rosterB, startingTeam, gameDate, homeAttackRight=true, gameTypeData={type:'amistoso',competitionName:''}) => {
     const g = {
       ...newGame(nameA, nameB, rosterA, rosterB, homeAttackRight),
       possessions: startingTeam === 0 ? [1,0] : [0,1],
       firstPossTeam: startingTeam,
       adversaryHadPoss: false,
       gameDate: gameDate || new Date().toLocaleDateString('pt-BR'),
+      gameType: gameTypeData.type || 'amistoso',
+      competitionName: gameTypeData.competitionName || '',
     };
     setGame(g);
     setShowNewGame(false);
@@ -2140,7 +2185,14 @@ export default function App() {
           <div className="home-sub">Análise ao vivo · Open Source · PWA</div>
         </div>
         <div className="home-user-bar">
-          <span className="home-user-email">{user.email}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <span className="home-user-email">{user.email}</span>
+            {user.last_sign_in_at && (
+              <div style={{fontSize:'11px',color:'var(--muted)',marginTop:'2px'}}>
+                Último login: {new Date(user.last_sign_in_at).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})}
+              </div>
+            )}
+          </div>
           <button className="home-logout-btn" onClick={async()=>{
               await signOut();
               setUser(null);
@@ -2209,7 +2261,12 @@ export default function App() {
                   <span>{g.teams[1].name}</span>
                 </div>
                 <div className="game-card-meta">
-                  <span>{g.gameDate||g.date}</span><span>{QUARTERS[g.quarter]||'OT'}</span><span>{g.log.length} eventos</span>
+                  <span>{g.gameDate||g.date}</span>
+                  <span>{QUARTERS[g.quarter]||'OT'}</span>
+                  <span style={{color:g.gameType==='competicao'?'var(--accent)':'var(--muted)',fontWeight:g.gameType==='competicao'?700:400}}>
+                    {g.gameType==='competicao' ? `🏆 ${g.competitionName||'Competição'}` : 'Amistoso'}
+                  </span>
+                  <span>{g.log.length} eventos</span>
                   <div className="export-btns" onClick={e=>e.stopPropagation()}>
                     <button className="export-btn" onClick={()=>exportStatsCSV(g)}>Stats</button>
                     <button className="export-btn green" onClick={()=>exportShotsCSV(g)}>Arrem.</button>
