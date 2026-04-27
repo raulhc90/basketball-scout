@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
-import { supabase, signIn, signUp, signOut, onAuthChange, fetchGames, upsertGame, deleteGame, fetchTeams, upsertTeam, deleteTeam, adminListUsers, adminInviteUser, adminResetPassword, adminToggleBan } from './supabase';
+import { supabase, signIn, signOut, onAuthChange, fetchGames, upsertGame, deleteGame, fetchTeams, upsertTeam, deleteTeam, adminListUsers, adminInviteUser, adminResetPassword, adminToggleBan } from './supabase';
 
 const BASE_QUARTERS = ['1Q', '2Q', '3Q', '4Q'];
 const getQuarterLabel = (q) => q < 4 ? BASE_QUARTERS[q] : `OT${q - 3}`;
