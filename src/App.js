@@ -846,17 +846,44 @@ function ResetPasswordScreen() {
   const [error, setError]     = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
+
+  // Processar token da URL para estabelecer sessão antes de permitir atualizar senha
+  useEffect(() => {
+    const hash = window.location.hash;
+    const params = new URLSearchParams(hash.replace('#', ''));
+    const accessToken  = params.get('access_token');
+    const refreshToken = params.get('refresh_token');
+
+    if (accessToken && refreshToken) {
+      // Estabelecer sessão a partir dos tokens da URL
+      supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+        .then(({ error: e }) => {
+          if (e) { setError('Link inválido ou expirado. Solicite um novo link de redefinição.'); }
+          else   { setSessionReady(true); }
+        });
+    } else {
+      // Tentar verificar sessão existente (caso o Supabase já tenha processado)
+      supabase.auth.getSession().then(({ data }) => {
+        if (data.session) setSessionReady(true);
+        else setError('Link inválido ou expirado. Solicite um novo link de redefinição.');
+      });
+    }
+  }, []);
 
   const handle = async () => {
-    if (pass.length < 6)    { setError('Senha mínima: 6 caracteres.'); return; }
-    if (pass !== confirm)   { setError('As senhas não coincidem.'); return; }
+    if (pass.length < 6)  { setError('Senha mínima: 6 caracteres.'); return; }
+    if (pass !== confirm)  { setError('As senhas não coincidem.'); return; }
     setError(''); setLoading(true);
     const { error: e } = await supabase.auth.updateUser({ password: pass });
     setLoading(false);
     if (e) { setError(e.message); return; }
     setSuccess(true);
-    // Redireciona para home após 2s
-    setTimeout(() => { window.location.hash = ''; window.location.reload(); }, 2000);
+    // Logout e redireciona para login após 2s
+    setTimeout(async () => {
+      await supabase.auth.signOut();
+      window.location.href = window.location.origin;
+    }, 2000);
   };
 
   return (
@@ -887,20 +914,29 @@ function ResetPasswordScreen() {
           <div className="teams-sync-banner saved">
             ✓ Senha redefinida com sucesso! Redirecionando...
           </div>
+        ) : !sessionReady && !error ? (
+          <div style={{textAlign:'center',color:'var(--muted)',padding:'12px'}}>
+            <div style={{fontSize:'22px',marginBottom:'8px'}}>⏳</div>
+            Verificando link...
+          </div>
         ) : (
           <>
             <div className="login-fields">
               <input className="login-input" type="password" placeholder="Nova senha"
                 value={pass} onChange={e=>setPass(e.target.value)}
-                onKeyDown={e=>e.key==='Enter'&&handle()}/>
+                onKeyDown={e=>e.key==='Enter'&&sessionReady&&handle()}
+                disabled={!sessionReady}/>
               <input className="login-input" type="password" placeholder="Confirmar nova senha"
                 value={confirm} onChange={e=>setConfirm(e.target.value)}
-                onKeyDown={e=>e.key==='Enter'&&handle()}/>
+                onKeyDown={e=>e.key==='Enter'&&sessionReady&&handle()}
+                disabled={!sessionReady}/>
             </div>
             {error && <div className="login-error">{error}</div>}
-            <button className="login-btn" onClick={handle} disabled={loading||!pass||!confirm}>
-              {loading ? 'Salvando...' : 'Salvar nova senha'}
-            </button>
+            {sessionReady && (
+              <button className="login-btn" onClick={handle} disabled={loading||!pass||!confirm}>
+                {loading ? 'Salvando...' : 'Salvar nova senha'}
+              </button>
+            )}
           </>
         )}
       </div>
