@@ -1214,17 +1214,20 @@ function AdminScreen({ onClose }) {
 }
 
 // ─── TeamsScreen ──────────────────────────────────────────────────────────────
-function TeamsScreen({ teams, onSave, syncStatus, onClose }) {
+function TeamsScreen({ teams, onSave, syncStatus, onClose, userId }) {
   const [list, setList]       = useState(teams.map(t => ({ ...t, players: t.players.map(p => ({ ...p })) })));
-  const [editing, setEditing] = useState(null); // idx do time sendo editado
+  const [editing, setEditing] = useState(null);
   const [newName, setNewName] = useState('');
+  const [uploading, setUploading] = useState({});
+
+  const BLANK_ROSTER_PLAYER = () => ({ number:'', name:'', photo:'', height:'', hand:'' });
 
   const addTeam = () => {
     if (!newName.trim()) return;
-    const t = { id: Date.now().toString(), name: newName.trim(), players: Array.from({length:5}, () => ({ number:'', name:'' })) };
+    const t = { id: Date.now().toString(), name: newName.trim(), players: Array.from({length:5}, BLANK_ROSTER_PLAYER) };
     setList(prev => [...prev, t]);
     setNewName('');
-    setEditing(list.length); // abre o novo time para editar
+    setEditing(list.length);
   };
 
   const removeTeam = (idx) => {
@@ -1240,18 +1243,32 @@ function TeamsScreen({ teams, onSave, syncStatus, onClose }) {
     })));
   };
   const addPlayer = (ti) => setList(prev => prev.map((t,i) => i !== ti ? t :
-    t.players.length >= 15 ? t : { ...t, players: [...t.players, { number:'', name:'' }] }
+    t.players.length >= 15 ? t : { ...t, players: [...t.players, BLANK_ROSTER_PLAYER()] }
   ));
   const removePlayer = (ti, pi) => setList(prev => prev.map((t,i) => i !== ti ? t : ({
     ...t, players: t.players.filter((_,j) => j !== pi)
   })));
   const renameTeam = (ti, val) => setList(prev => prev.map((t,i) => i !== ti ? t : { ...t, name: val }));
 
+  const handlePhotoUpload = async (ti, pi, file) => {
+    if (!userId) { alert('Faça login para fazer upload de fotos.'); return; }
+    const key = `${ti}-${pi}`;
+    setUploading(prev => ({ ...prev, [key]: true }));
+    try {
+      const url = await uploadPlayerPhoto(file, userId);
+      updPlayer(ti, pi, 'photo', url);
+    } catch (e) {
+      alert('Erro ao fazer upload: ' + e.message);
+    } finally {
+      setUploading(prev => { const n = { ...prev }; delete n[key]; return n; });
+    }
+  };
+
   const ed = editing !== null ? list[editing] : null;
 
   return (
     <div className="modal-overlay">
-      <div className="modal" style={{maxWidth:'520px'}}>
+      <div className="modal" style={{maxWidth:'560px'}}>
         <div className="modal-header">
           <span>⚑ Meus Times</span>
           <button className="modal-close" onClick={onClose}>✕</button>
@@ -1289,17 +1306,43 @@ function TeamsScreen({ teams, onSave, syncStatus, onClose }) {
               <input className="team-name-input" value={ed.name}
                 onChange={e => renameTeam(editing, e.target.value)}
                 style={{marginBottom:'8px',width:'100%',boxSizing:'border-box'}}/>
-              <div className="modal-roster-header"><span>#</span><span>Nome</span></div>
               <div className="modal-roster">
                 {ed.players.map((p,pi) => (
-                  <div key={pi} className="modal-player-row">
-                    <input className="num-input" value={p.number} maxLength={2} placeholder="#"
-                      onChange={e=>updPlayer(editing,pi,'number',e.target.value)}/>
-                    <input className="name-inp" value={p.name} placeholder="Nome"
-                      onChange={e=>updPlayer(editing,pi,'name',e.target.value)}/>
-                    {ed.players.length > 1 && (
-                      <button className="rm-player-btn" onClick={()=>removePlayer(editing,pi)}>✕</button>
-                    )}
+                  <div key={pi} className="player-card">
+                    {/* Linha 1: foto · número · nome · remover */}
+                    <div className="player-card-top">
+                      <label className="player-photo-btn" title="Clique para trocar a foto">
+                        {uploading[`${editing}-${pi}`]
+                          ? <span className="player-photo-loading">⏳</span>
+                          : p.photo
+                            ? <img src={p.photo} alt="" className="player-photo-img"/>
+                            : <span className="player-photo-placeholder">📷</span>
+                        }
+                        <input type="file" accept="image/*" style={{display:'none'}}
+                          onChange={e => e.target.files[0] && handlePhotoUpload(editing, pi, e.target.files[0])}/>
+                      </label>
+                      <input className="num-input" value={p.number} maxLength={2} placeholder="#"
+                        onChange={e=>updPlayer(editing,pi,'number',e.target.value)}/>
+                      <input className="name-inp" value={p.name} placeholder="Nome"
+                        onChange={e=>updPlayer(editing,pi,'name',e.target.value)}/>
+                      {ed.players.length > 1 && (
+                        <button className="rm-player-btn" onClick={()=>removePlayer(editing,pi)}>✕</button>
+                      )}
+                    </div>
+                    {/* Linha 2: altura · lateralidade */}
+                    <div className="player-card-bottom">
+                      <input className="height-inp" value={p.height||''} placeholder="Alt. (m)"
+                        onChange={e=>updPlayer(editing,pi,'height',e.target.value)}/>
+                      <div className="hand-toggle">
+                        {[['right','D','Destro'],['left','C','Canhoto'],['both','A','Ambidestro']].map(([val,label,title]) => (
+                          <button key={val} title={title}
+                            className={`hand-btn${p.hand===val?' active':''}`}
+                            onClick={()=>updPlayer(editing,pi,'hand', p.hand===val?'':val)}>
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 ))}
                 {ed.players.length < 15 && (
@@ -2303,7 +2346,7 @@ export default function App() {
   if (screen === 'home') return (
     <div className="app">
       {showNewGame && <NewGameModal onStart={startGame} onClose={()=>setShowNewGame(false)} savedTeams={savedTeams}/>}
-      {showTeams && <TeamsScreen teams={savedTeams} onSave={saveTeams} syncStatus={teamsSyncStatus} onClose={()=>setShowTeams(false)}/>}
+      {showTeams && <TeamsScreen teams={savedTeams} onSave={saveTeams} syncStatus={teamsSyncStatus} onClose={()=>setShowTeams(false)} userId={user?.id}/>}
       {showAdmin && <AdminScreen onClose={()=>setShowAdmin(false)}/>}
       <div className="home-screen">
         <div className="home-logo">

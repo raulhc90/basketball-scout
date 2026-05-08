@@ -1103,6 +1103,52 @@ tr[data-disq=true] { opacity:.6; }
 .rm-player-btn:active { color: var(--red); }
 .modal-player-row { display:flex; gap:5px; align-items:center; }
 
+/* ── Player card (cadastro de times) ─────────────────────────────────────── */
+.player-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+.player-card-top { display: flex; gap: 6px; align-items: center; }
+.player-card-bottom {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-left: 48px;
+}
+.player-photo-btn {
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 1px dashed var(--border);
+  background: var(--bg2);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0; overflow: hidden;
+  transition: border-color .15s;
+}
+.player-photo-btn:hover { border-color: var(--accent); }
+.player-photo-img { width:100%; height:100%; object-fit:cover; border-radius:50%; }
+.player-photo-placeholder { font-size:18px; line-height:1; }
+.player-photo-loading { font-size:16px; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.height-inp {
+  background: var(--bg2); border: 1px solid var(--border);
+  color: var(--text); border-radius: 6px;
+  padding: 5px 8px; font-family: var(--fb); font-size:12px;
+  width: 80px; outline: none;
+}
+.height-inp:focus { border-color: var(--accent); }
+.hand-toggle { display:flex; gap:4px; }
+.hand-btn {
+  background: var(--bg2); border: 1px solid var(--border);
+  color: var(--muted); border-radius: 6px;
+  padding: 4px 10px; font-family: var(--fd); font-size:12px; font-weight:700;
+  cursor: pointer; transition: all .12s;
+}
+.hand-btn:hover { border-color: var(--accent); color: var(--text); }
+.hand-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 
 /* ════════════════════════════════════════════════════
    WINFAST UX — TEMA PRETO E AMARELO
