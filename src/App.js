@@ -22,7 +22,7 @@ const INITIAL_PLAYER = () => ({
   possessions: 0
 });
 
-const calcPIR = p =>
+const calcEFF = p =>
   p.pts + (p.reb + p.oreb) + p.ast + p.stl + p.blk
   + (p.fg2m + p.fg3m - p.fg2a - p.fg3a)
   + (p.ftm - p.fta)
@@ -92,12 +92,12 @@ function exportStatsCSV(game) {
   const d = game.gameDate || game.date || '';
   const matchup = `${game.teams[0].name} vs ${game.teams[1].name}`;
   const tipo = game.gameType === 'competicao' ? (game.competitionName||'Competição') : 'Amistoso';
-  const lines = [`Data,Tipo,Jogo,Numero,Atleta,Time,MIN,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG%,FG3M,FG3A,3P%,FTM,FTA,LL%,FALTAS,FALTAS.SOF,+/-,PIR,POSSES.ATL`];
+  const lines = [`Data,Tipo,Jogo,Numero,Atleta,Time,MIN,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG%,FG3M,FG3A,3P%,FTM,FTA,LL%,FALTAS,FALTAS.SOF,+/-,EFF,POSSES.ATL`];
   game.teams.forEach((t, ti) => {
     t.players.forEach(p => {
       const pm = (p.plusMinus||0) >= 0 ? `+${p.plusMinus||0}` : `${p.plusMinus||0}`;
       const min = `${Math.floor((p.timeOnCourt||0)/60)}:${String(Math.round((p.timeOnCourt||0)%60)).padStart(2,'0')}`;
-      lines.push(`"${d}","${tipo}","${matchup}","${p.number}","${p.name}","${t.name}",${min},${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${p.fg3m},${p.fg3a},${pct(p.fg3m,p.fg3a)},${p.ftm},${p.fta},${pct(p.ftm,p.fta)},${p.fouls},${p.foulsReceived||0},${pm},${calcPIR(p)},${p.possessions||0}`);
+      lines.push(`"${d}","${tipo}","${matchup}","${p.number}","${p.name}","${t.name}",${min},${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${p.fg3m},${p.fg3a},${pct(p.fg3m,p.fg3a)},${p.ftm},${p.fta},${pct(p.ftm,p.fta)},${p.fouls},${p.foulsReceived||0},${pm},${calcEFF(p)},${p.possessions||0}`);
     });
     const tot = totals(t);
     const teamPoss = (game.possessions||[0,0])[ti]||0;
@@ -156,11 +156,11 @@ function exportShotsCSV(game) {
   const d = game.gameDate || game.date || '';
   const matchup = `${game.teams[0].name} vs ${game.teams[1].name}`;
   const tipo = game.gameType === 'competicao' ? (game.competitionName||'Competição') : 'Amistoso';
-  const lines = ['Data,Tipo,Jogo,Numero,Atleta,Time,Quarto,Tempo,X_pct,Y_pct,Convertido,Zona,Subtipo,Assistencia'];
+  const lines = ['Data,Tipo,Jogo,Numero,Atleta,Time,Quarto,Tempo,X_pct,Y_pct,Convertido,Zona,Subtipo,Assistencia,Marcador'];
   game.teams.forEach(t => t.players.forEach(p =>
     (p.shots||[]).forEach(s => {
       const subtipo = s.three ? 'Arremesso' : (s.shotType && s.shotType !== '3pts' ? s.shotType : 'Arremesso');
-      lines.push(`"${d}","${tipo}","${matchup}","${p.number}","${p.name}","${t.name}","${s.q||''}","${s.time||''}",${s.x.toFixed(2)},${s.y.toFixed(2)},${s.made?'Sim':'Não'},${s.three?'3pts':'2pts'},"${subtipo}","${s.assistedBy||''}"`);
+      lines.push(`"${d}","${tipo}","${matchup}","${p.number}","${p.name}","${t.name}","${s.q||''}","${s.time||''}",${s.x.toFixed(2)},${s.y.toFixed(2)},${s.made?'Sim':'Não'},${s.three?'3pts':'2pts'},"${subtipo}","${s.assistedBy||''}","${s.markedBy||''}"`);
     })));
   dl(lines.join('\n'), `arremessos_${game.teams[0].name}_vs_${game.teams[1].name}_${game.date.replace(/\//g,'-')}.csv`);
 }
@@ -421,6 +421,31 @@ function AssistModal({ players, scorerIdx, onSelect, onNone, onCancel }) {
           </div>
         </div>
         <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── MarkingModal ─────────────────────────────────────────────────────────────
+function MarkingModal({ players, onSelect, onNone }) {
+  const eligible = players.filter(p => p.active && p.fouls < FOUL_DISQUALIFY && (p.techFouls||0) < TECH_DISQUALIFY);
+  return (
+    <div className="confirm-overlay">
+      <div className="confirm-modal" style={{maxWidth:'380px',width:'94%'}}>
+        <div className="confirm-title">Quem marcava?</div>
+        <div style={{padding:'4px 0 8px'}}>
+          <button className="assist-none-btn" onClick={onNone}>Não identificado</button>
+          {eligible.length === 0 && <div style={{padding:'12px 4px',color:'var(--muted)',textAlign:'center'}}>Nenhum atleta em quadra</div>}
+          <div className="assist-players-grid" style={{marginTop:'8px'}}>
+            {eligible.map((p, i) => (
+              <button key={i} className="assist-player-btn"
+                onClick={() => onSelect(`#${p.number} ${p.name.split(' ')[0]}`)}>
+                <span className="assist-pnum">#{p.number}</span>
+                <span className="assist-pname">{p.name.split(' ')[0]}</span>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1612,6 +1637,8 @@ export default function App() {
   const [turnoverPending, setTurnoverPending] = useState(false);
   // reboundPending: { playerIdx, three, shotType } quando arremesso errado aguarda rebote
   const [reboundPending, setReboundPending] = useState(null);
+  // markingPending: aguarda seleção do defensor após assistência/rebote resolvidos
+  const [markingPending, setMarkingPending] = useState(null);
   const undoStack = useRef([]);
   const syncTimer = useRef(null);   // debounce do sync para Supabase
 
@@ -2182,7 +2209,7 @@ export default function App() {
 
   // ── commitShot ──────────────────────────────────────────────────────────────
   // keepPossession=true: arremesso errado mas com rebote ofensivo → não dá posse ao adversário
-  const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, shotType='Arremesso', keepPossession=false) => {
+  const commitShot = useCallback((playerIdx, xPct, yPct, made, three, assistIdx, shotType='Arremesso', keepPossession=false, markerName='') => {
     const pts = made ? (three?3:2) : 0;
     const actionId = made ? (three?'fg3m':'fg2m') : (three?'fg3miss':'fg2miss');
     const col = made ? (three?'#3b82f6':'#22c55e') : '#475569';
@@ -2205,6 +2232,7 @@ export default function App() {
                   x:xPct, y:yPct, made, three, zone:three?'3pts':'2pts',
                   shotType: three?'3pts':(shotType||'Arremesso'),
                   assistedBy: apl?`#${apl.number} ${apl.name.split(' ')[0]}`:'',
+                  markedBy: markerName||'',
                   q:getQuarterLabel(g.quarter), time:fmtTime(g.clock),
                 }];
               }
@@ -2250,7 +2278,7 @@ export default function App() {
   // ── handleCourtClick ────────────────────────────────────────────────────────
   const handleCourtClick = useCallback(e => {
     if (selectedPlayer === null) return;
-    if (confirmShot||assistPending||foulPending||ftFlow||subModal||turnoverPending||reboundPending) return;
+    if (confirmShot||assistPending||foulPending||ftFlow||subModal||turnoverPending||reboundPending||markingPending) return;
     if (game?.finished) { showToast('Jogo finalizado'); return; }
     if (!running) { showToast('Inicie o cronômetro para marcar'); return; }
     const rect = e.currentTarget.getBoundingClientRect();
@@ -2260,7 +2288,7 @@ export default function App() {
     const { valid, three, inPaint } = classifyShot(xPct,yPct,dir);
     if (!valid) { showToast('Arremesso no lado errado da quadra'); return; }
     setConfirmShot({ xPct, yPct, three, inPaint });
-  }, [selectedPlayer, confirmShot, assistPending, foulPending, ftFlow, subModal, turnoverPending, reboundPending, running, activeTeam, game]);
+  }, [selectedPlayer, confirmShot, assistPending, foulPending, ftFlow, subModal, turnoverPending, reboundPending, markingPending, running, activeTeam, game]);
 
   // ── applyMisc ───────────────────────────────────────────────────────────────
   const applyMisc = useCallback((action, teamIdx = activeTeam) => {
@@ -2573,8 +2601,14 @@ export default function App() {
       )}
       {assistPending && (
         <AssistModal players={td.players} scorerIdx={assistPending.scorerIdx}
-          onSelect={aIdx=>commitShot(assistPending.scorerIdx,assistPending.xPct,assistPending.yPct,true,assistPending.three,aIdx,assistPending.shotType)}
-          onNone={()=>commitShot(assistPending.scorerIdx,assistPending.xPct,assistPending.yPct,true,assistPending.three,null,assistPending.shotType)}
+          onSelect={aIdx => {
+            const p = assistPending; setAssistPending(null);
+            setMarkingPending({ playerIdx:p.scorerIdx, xPct:p.xPct, yPct:p.yPct, made:true, three:p.three, assistIdx:aIdx, shotType:p.shotType, keepPossession:false, rebPlayerIdx:null });
+          }}
+          onNone={() => {
+            const p = assistPending; setAssistPending(null);
+            setMarkingPending({ playerIdx:p.scorerIdx, xPct:p.xPct, yPct:p.yPct, made:true, three:p.three, assistIdx:null, shotType:p.shotType, keepPossession:false, rebPlayerIdx:null });
+          }}
           onCancel={()=>setAssistPending(null)}
         />
       )}
@@ -2592,41 +2626,75 @@ export default function App() {
         <MissedShotReboundModal
           attackingPlayers={game.teams[activeTeam].players}
           onRebound={(rebPlayerIdx) => {
-            // Rebote ofensivo: registra arremesso errado + rebote, mantém posse
-            const r = reboundPending;
-            commitShot(r.playerIdx, r.xPct, r.yPct, false, r.three, null, r.shotType, true /* keepPossession */);
-            if (rebPlayerIdx !== null) {
-              // Credita rebote ofensivo ao jogador
-              setGameWithUndo(g => {
-                const teams = g.teams.map((t, ti) => {
-                  if (ti !== activeTeam) return t;
-                  return { ...t, players: t.players.map((p, pi) =>
-                    pi === rebPlayerIdx ? { ...p, oreb: (p.oreb||0)+1 } : p
-                  )};
-                });
-                const pl = g.teams[activeTeam].players[rebPlayerIdx];
-                const entry = { id: Date.now(), q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
-                  team: g.teams[activeTeam].name, player: `#${pl.number} ${pl.name.split(' ')[0]}`,
-                  action: 'Reb. Ofensivo', pts: 0, color: '#0891b2' };
-                return { ...g, teams, log: [entry, ...g.log] };
-              });
-              // Troca seletor para o jogador que pegou o rebote
-              if (activeTeam === 0) setSelectedPlayerA(rebPlayerIdx);
-              else setSelectedPlayerB(rebPlayerIdx);
-            }
-            setReboundPending(null);
+            const r = reboundPending; setReboundPending(null);
+            setMarkingPending({ playerIdx:r.playerIdx, xPct:r.xPct, yPct:r.yPct, made:false, three:r.three, assistIdx:null, shotType:r.shotType, keepPossession:true, rebPlayerIdx });
           }}
           onNoRebound={() => {
-            const r = reboundPending;
-            const opp = 1 - activeTeam;
-            commitShot(r.playerIdx, r.xPct, r.yPct, false, r.three, null, r.shotType, false);
-            setReboundPending(null);
-            // Adversário pegou: troca seletor para o time adversário
-            setActiveTeam(opp);
-            setSelectedPlayerA(null);
-            setSelectedPlayerB(null);
+            const r = reboundPending; setReboundPending(null);
+            setMarkingPending({ playerIdx:r.playerIdx, xPct:r.xPct, yPct:r.yPct, made:false, three:r.three, assistIdx:null, shotType:r.shotType, keepPossession:false, rebPlayerIdx:null });
           }}
           onCancel={() => setReboundPending(null)}
+        />
+      )}
+      {markingPending && (
+        <MarkingModal
+          players={game.teams[1 - activeTeam].players}
+          onSelect={markerName => {
+            const m = markingPending; setMarkingPending(null);
+            commitShot(m.playerIdx, m.xPct, m.yPct, m.made, m.three, m.assistIdx, m.shotType, m.keepPossession, markerName);
+            if (!m.made) {
+              if (m.keepPossession) {
+                if (m.rebPlayerIdx !== null) {
+                  setGameWithUndo(g => {
+                    const teams = g.teams.map((t, ti) => {
+                      if (ti !== activeTeam) return t;
+                      return { ...t, players: t.players.map((p, pi) =>
+                        pi === m.rebPlayerIdx ? { ...p, oreb: (p.oreb||0)+1 } : p
+                      )};
+                    });
+                    const pl = g.teams[activeTeam].players[m.rebPlayerIdx];
+                    const entry = { id: Date.now(), q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
+                      team: g.teams[activeTeam].name, player: `#${pl.number} ${pl.name.split(' ')[0]}`,
+                      action: 'Reb. Ofensivo', pts: 0, color: '#0891b2' };
+                    return { ...g, teams, log: [entry, ...g.log] };
+                  });
+                  if (activeTeam === 0) setSelectedPlayerA(m.rebPlayerIdx);
+                  else setSelectedPlayerB(m.rebPlayerIdx);
+                }
+              } else {
+                setActiveTeam(1 - activeTeam);
+                setSelectedPlayerA(null); setSelectedPlayerB(null);
+              }
+            }
+          }}
+          onNone={() => {
+            const m = markingPending; setMarkingPending(null);
+            commitShot(m.playerIdx, m.xPct, m.yPct, m.made, m.three, m.assistIdx, m.shotType, m.keepPossession, '');
+            if (!m.made) {
+              if (m.keepPossession) {
+                if (m.rebPlayerIdx !== null) {
+                  setGameWithUndo(g => {
+                    const teams = g.teams.map((t, ti) => {
+                      if (ti !== activeTeam) return t;
+                      return { ...t, players: t.players.map((p, pi) =>
+                        pi === m.rebPlayerIdx ? { ...p, oreb: (p.oreb||0)+1 } : p
+                      )};
+                    });
+                    const pl = g.teams[activeTeam].players[m.rebPlayerIdx];
+                    const entry = { id: Date.now(), q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
+                      team: g.teams[activeTeam].name, player: `#${pl.number} ${pl.name.split(' ')[0]}`,
+                      action: 'Reb. Ofensivo', pts: 0, color: '#0891b2' };
+                    return { ...g, teams, log: [entry, ...g.log] };
+                  });
+                  if (activeTeam === 0) setSelectedPlayerA(m.rebPlayerIdx);
+                  else setSelectedPlayerB(m.rebPlayerIdx);
+                }
+              } else {
+                setActiveTeam(1 - activeTeam);
+                setSelectedPlayerA(null); setSelectedPlayerB(null);
+              }
+            }
+          }}
         />
       )}
       {/* ── Fluxo completo de Lance Livre ── */}
@@ -3001,7 +3069,7 @@ export default function App() {
                         <th title="Faltas cometidas">FL</th>
                         <th title="Faltas sofridas">FS</th>
                         <th title="Plus/Minus — diferença de pontos com o atleta em quadra">+/-</th>
-                        <th title="Performance Index Rating (FIBA) = PTS+REB+AST+STL+BLK+(FGM-FGA)+(FTM-FTA)-TO-FL">PIR</th>
+                        <th title="Efficiency = PTS+REB+AST+STL+BLK+(FGM-FGA)+(FTM-FTA)-TO-FL">EFF</th>
                       </tr></thead>
                       <tbody>
                         {active.map(p=>(
@@ -3025,7 +3093,7 @@ export default function App() {
                             <td data-warn={p.fouls>=FOUL_TROUBLE&&p.fouls<FOUL_DISQUALIFY} data-danger={p.fouls>=FOUL_DISQUALIFY||(p.techFouls||0)>=TECH_DISQUALIFY}>{p.fouls}{p.techFouls>0?`+${p.techFouls}t`:''}</td>
                             <td style={{color:'var(--blue)'}}>{p.foulsReceived||0}</td>
                             <td className={(p.plusMinus||0)>0?'pm-pos':(p.plusMinus||0)<0?'pm-neg':''}>{(p.plusMinus||0)>=0?`+${p.plusMinus||0}`:p.plusMinus||0}</td>
-                            <td className={calcPIR(p)>0?'pm-pos':calcPIR(p)<0?'pm-neg':''}>{calcPIR(p)}</td>
+                            <td className={calcEFF(p)>0?'pm-pos':calcEFF(p)<0?'pm-neg':''}>{calcEFF(p)}</td>
                           </tr>
                         ))}
                       </tbody>
