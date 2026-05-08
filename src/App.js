@@ -451,6 +451,32 @@ function MarkingModal({ players, onSelect, onNone }) {
   );
 }
 
+// ─── DefensiveReboundModal ────────────────────────────────────────────────────
+function DefensiveReboundModal({ players, onSelect, onNone }) {
+  const eligible = players.filter(p => p.active && p.fouls < FOUL_DISQUALIFY);
+  return (
+    <div className="confirm-overlay">
+      <div className="confirm-modal" style={{maxWidth:'380px',width:'94%'}}>
+        <div className="confirm-title">Quem pegou o rebote?</div>
+        <div style={{padding:'0 0 8px'}}>
+          <button className="assist-none-btn" onClick={onNone}>Não identificado</button>
+          {eligible.length === 0 && <div style={{padding:'12px 4px',color:'var(--muted)',textAlign:'center'}}>Nenhum atleta em quadra</div>}
+          <div className="assist-players-grid" style={{marginTop:'8px'}}>
+            {eligible.map((p, i) => (
+              <button key={i} className="assist-player-btn"
+                onClick={() => onSelect(players.indexOf(p))}>
+                <span className="assist-pnum">#{p.number}</span>
+                <span className="assist-pname">{p.name.split(' ')[0]}</span>
+                <span className="assist-past">{p.reb}reb</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── FreeThrowModal: seleciona jogador arremessador ───────────────────────────
 function FreeThrowModal({ players, title, onSelect, onCancel }) {
   return (
@@ -1639,6 +1665,8 @@ export default function App() {
   const [reboundPending, setReboundPending] = useState(null);
   // markingPending: aguarda seleção do defensor após assistência/rebote resolvidos
   const [markingPending, setMarkingPending] = useState(null);
+  // defReboundPending: aguarda seleção de quem pegou o rebote defensivo
+  const [defReboundPending, setDefReboundPending] = useState(null);
   const undoStack = useRef([]);
   const syncTimer = useRef(null);   // debounce do sync para Supabase
 
@@ -2278,7 +2306,7 @@ export default function App() {
   // ── handleCourtClick ────────────────────────────────────────────────────────
   const handleCourtClick = useCallback(e => {
     if (selectedPlayer === null) return;
-    if (confirmShot||assistPending||foulPending||ftFlow||subModal||turnoverPending||reboundPending||markingPending) return;
+    if (confirmShot||assistPending||foulPending||ftFlow||subModal||turnoverPending||reboundPending||defReboundPending||markingPending) return;
     if (game?.finished) { showToast('Jogo finalizado'); return; }
     if (!running) { showToast('Inicie o cronômetro para marcar'); return; }
     const rect = e.currentTarget.getBoundingClientRect();
@@ -2288,7 +2316,7 @@ export default function App() {
     const { valid, three, inPaint } = classifyShot(xPct,yPct,dir);
     if (!valid) { showToast('Arremesso no lado errado da quadra'); return; }
     setConfirmShot({ xPct, yPct, three, inPaint });
-  }, [selectedPlayer, confirmShot, assistPending, foulPending, ftFlow, subModal, turnoverPending, reboundPending, markingPending, running, activeTeam, game]);
+  }, [selectedPlayer, confirmShot, assistPending, foulPending, ftFlow, subModal, turnoverPending, reboundPending, defReboundPending, markingPending, running, activeTeam, game]);
 
   // ── applyMisc ───────────────────────────────────────────────────────────────
   const applyMisc = useCallback((action, teamIdx = activeTeam) => {
@@ -2631,9 +2659,38 @@ export default function App() {
           }}
           onNoRebound={() => {
             const r = reboundPending; setReboundPending(null);
-            setMarkingPending({ playerIdx:r.playerIdx, xPct:r.xPct, yPct:r.yPct, made:false, three:r.three, assistIdx:null, shotType:r.shotType, keepPossession:false, rebPlayerIdx:null });
+            setDefReboundPending({ playerIdx:r.playerIdx, xPct:r.xPct, yPct:r.yPct, three:r.three, shotType:r.shotType });
           }}
           onCancel={() => setReboundPending(null)}
+        />
+      )}
+      {defReboundPending && (
+        <DefensiveReboundModal
+          players={game.teams[1 - activeTeam].players}
+          onSelect={defRebIdx => {
+            const d = defReboundPending; setDefReboundPending(null);
+            const opp = 1 - activeTeam;
+            if (defRebIdx !== null) {
+              setGameWithUndo(g => {
+                const teams = g.teams.map((t, ti) => {
+                  if (ti !== opp) return t;
+                  return { ...t, players: t.players.map((p, pi) =>
+                    pi === defRebIdx ? { ...p, reb: (p.reb||0)+1 } : p
+                  )};
+                });
+                const pl = g.teams[opp].players[defRebIdx];
+                const entry = { id: Date.now(), q: getQuarterLabel(g.quarter), time: fmtTime(g.clock),
+                  team: g.teams[opp].name, player: `#${pl.number} ${pl.name.split(' ')[0]}`,
+                  action: 'Reb. Defensivo', pts: 0, color: '#64748b' };
+                return { ...g, teams, log: [entry, ...g.log] };
+              });
+            }
+            setMarkingPending({ playerIdx:d.playerIdx, xPct:d.xPct, yPct:d.yPct, made:false, three:d.three, assistIdx:null, shotType:d.shotType, keepPossession:false, rebPlayerIdx:null });
+          }}
+          onNone={() => {
+            const d = defReboundPending; setDefReboundPending(null);
+            setMarkingPending({ playerIdx:d.playerIdx, xPct:d.xPct, yPct:d.yPct, made:false, three:d.three, assistIdx:null, shotType:d.shotType, keepPossession:false, rebPlayerIdx:null });
+          }}
         />
       )}
       {markingPending && (
