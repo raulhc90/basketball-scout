@@ -12,7 +12,7 @@ const TEAM_FOUL_BONUS = 5;
 const TECH_DISQUALIFY = 2;
 
 const INITIAL_PLAYER = () => ({
-  pts: 0, ast: 0, reb: 0, oreb: 0, stl: 0, blk: 0, to: 0,
+  pts: 0, ast: 0, reb: 0, oreb: 0, stl: 0, blk: 0, to: 0, deflections: 0,
   fg2a: 0, fg2m: 0, fg3a: 0, fg3m: 0, fta: 0, ftm: 0,
   fouls: 0, techFouls: 0, foulsReceived: 0,
   plusMinus: 0,
@@ -92,12 +92,13 @@ function exportStatsCSV(game) {
   const d = game.gameDate || game.date || '';
   const matchup = `${game.teams[0].name} vs ${game.teams[1].name}`;
   const tipo = game.gameType === 'competicao' ? (game.competitionName||'Competição') : 'Amistoso';
-  const lines = [`Data,Tipo,Jogo,Numero,Atleta,Time,MIN,PTS,AST,REB,REB.OF,STL,BLK,TO,FG2M,FG2A,FG%,FG3M,FG3A,3P%,FTM,FTA,LL%,FALTAS,FALTAS.SOF,+/-,EFF,POSSES.ATL`];
+  const lines = [`Data,Tipo,Jogo,Numero,Atleta,Time,MIN,PTS,AST,REB,REB.OF,STL,FTOV,BLK,TO,FG2M,FG2A,FG%,FG3M,FG3A,3P%,FTM,FTA,LL%,FALTAS,FALTAS.SOF,+/-,EFF,POSSES.ATL`];
   game.teams.forEach((t, ti) => {
     t.players.forEach(p => {
       const pm = (p.plusMinus||0) >= 0 ? `+${p.plusMinus||0}` : `${p.plusMinus||0}`;
       const min = `${Math.floor((p.timeOnCourt||0)/60)}:${String(Math.round((p.timeOnCourt||0)%60)).padStart(2,'0')}`;
-      lines.push(`"${d}","${tipo}","${matchup}","${p.number}","${p.name}","${t.name}",${min},${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${p.blk},${p.to},${p.fg2m},${p.fg2a},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${p.fg3m},${p.fg3a},${pct(p.fg3m,p.fg3a)},${p.ftm},${p.fta},${pct(p.ftm,p.fta)},${p.fouls},${p.foulsReceived||0},${pm},${calcEFF(p)},${p.possessions||0}`);
+      const ftov = (p.stl||0) + (p.deflections||0);
+      lines.push(`"${d}","${tipo}","${matchup}","${p.number}","${p.name}","${t.name}",${min},${p.pts},${p.ast},${p.reb},${p.oreb},${p.stl},${ftov},${p.blk},${p.to},${p.fg2m},${p.fg2a},${pct(p.fg2m+p.fg3m,p.fg2a+p.fg3a)},${p.fg3m},${p.fg3a},${pct(p.fg3m,p.fg3a)},${p.ftm},${p.fta},${pct(p.ftm,p.fta)},${p.fouls},${p.foulsReceived||0},${pm},${calcEFF(p)},${p.possessions||0}`);
     });
     const tot = totals(t);
     const teamPoss = (game.possessions||[0,0])[ti]||0;
@@ -1940,11 +1941,14 @@ export default function App() {
             pi === pIdx ? { ...p, to: (p.to||0)+1 } : p
           )
         };
-        // Se for roubo, incrementa STL do ladrão
+        // Se for roubo, incrementa STL; se for infração/outros, incrementa deflections
         if (ti === oppIdx && stealerIdx !== null) return {
-          ...t, players: t.players.map((p, pi) =>
-            pi === stealerIdx ? { ...p, stl: (p.stl||0)+1 } : p
-          )
+          ...t, players: t.players.map((p, pi) => {
+            if (pi !== stealerIdx) return p;
+            return toType === 'roubo'
+              ? { ...p, stl: (p.stl||0)+1 }
+              : { ...p, deflections: (p.deflections||0)+1 };
+          })
         };
         return t;
       });
@@ -3141,6 +3145,7 @@ export default function App() {
                         <th title="Rebotes defensivos">REB</th>
                         <th title="Rebotes ofensivos">RO</th>
                         <th title="Roubos de bola">STL</th>
+                        <th title="Forced Turnovers — STL + deflexões (forçou infração/outros)">FTOV</th>
                         <th title="Tocos (arremessos bloqueados)">BLK</th>
                         <th title="Turnovers (perdas de posse)">TO</th>
                         <th title="Cestas de 2 pontos: convertidas/tentadas">2P</th>
@@ -3165,7 +3170,9 @@ export default function App() {
                             <td style={{fontWeight:600,color:'var(--muted)'}}>{p.possessions||0}</td>
                             <td className="pts-cell">{p.pts}</td>
                             <td>{p.ast}</td><td>{p.reb}</td><td>{p.oreb}</td>
-                            <td>{p.stl}</td><td>{p.blk}</td>
+                            <td>{p.stl}</td>
+                            <td style={{color:'var(--accent)'}}>{(p.stl||0)+(p.deflections||0)}</td>
+                            <td>{p.blk}</td>
                             <td data-warn={p.to>2}>{p.to}</td>
                             <td className="shot-cell">{p.fg2m}/{p.fg2a}</td>
                             <td>{pct(p.fg2m,p.fg2a)}</td>
