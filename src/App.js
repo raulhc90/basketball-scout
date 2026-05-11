@@ -631,8 +631,10 @@ function FoulModal({ player, teamFoulsInQuarter, onType, onCancel }) {
 
 // ─── TurnoverModal ────────────────────────────────────────────────────────────
 function TurnoverModal({ activeTeamPlayers, onType, onCancel }) {
-  const [step, setStep] = useState('type');  // 'type' | 'stealer'
-  const [, setToType] = useState(null);
+  const [step, setStep]   = useState('type');  // 'type' | 'stealer' | 'forcer'
+  const [toType, setToType] = useState(null);
+
+  const eligible = activeTeamPlayers.filter(p => p.active && p.fouls < FOUL_DISQUALIFY);
 
   if (step === 'type') {
     return (
@@ -647,12 +649,12 @@ function TurnoverModal({ activeTeamPlayers, onType, onCancel }) {
                 <span className="foul-type-desc">Selecionar quem roubou</span>
               </button>
               <button className="foul-type-btn" style={{'--fc':'#ef4444'}}
-                onClick={() => onType('infracao', null)}>
+                onClick={() => { setToType('infracao'); setStep('forcer'); }}>
                 <span className="foul-type-label">Infração</span>
                 <span className="foul-type-desc">Passos, duplo drible...</span>
               </button>
               <button className="foul-type-btn" style={{'--fc':'#64748b'}}
-                onClick={() => onType('outros', null)}>
+                onClick={() => { setToType('outros'); setStep('forcer'); }}>
                 <span className="foul-type-label">Outros</span>
                 <span className="foul-type-desc">Má passagem, saiu pela linha...</span>
               </button>
@@ -664,26 +666,47 @@ function TurnoverModal({ activeTeamPlayers, onType, onCancel }) {
     );
   }
 
-  // step === 'stealer': selecionar jogador adversário que roubou
-  const eligible = activeTeamPlayers.filter(p => p.active && p.fouls < FOUL_DISQUALIFY);
-  return (
-    <div className="confirm-overlay">
-      <div className="confirm-modal" style={{maxWidth:'380px',width:'94%'}}>
-        <div className="confirm-title">Quem roubou a bola?</div>
-        <div style={{padding:'0 0 8px'}}>
-          <button className="assist-none-btn" onClick={() => onType('roubo', null)}>Não identificado</button>
-          <div className="assist-players-grid" style={{marginTop:'8px'}}>
-            {eligible.map((p, i) => {
-              const realIdx = activeTeamPlayers.indexOf(p);
-              return (
+  if (step === 'stealer') {
+    return (
+      <div className="confirm-overlay">
+        <div className="confirm-modal" style={{maxWidth:'380px',width:'94%'}}>
+          <div className="confirm-title">Quem roubou a bola?</div>
+          <div style={{padding:'0 0 8px'}}>
+            <button className="assist-none-btn" onClick={() => onType('roubo', null)}>Não identificado</button>
+            {eligible.length === 0 && <div style={{padding:'12px 4px',color:'var(--muted)',textAlign:'center'}}>Nenhum atleta em quadra</div>}
+            <div className="assist-players-grid" style={{marginTop:'8px'}}>
+              {eligible.map((p, i) => (
                 <button key={i} className="assist-player-btn"
-                  onClick={() => onType('roubo', realIdx)}>
+                  onClick={() => onType('roubo', activeTeamPlayers.indexOf(p))}>
                   <span className="assist-pnum">#{p.number}</span>
                   <span className="assist-pname">{p.name.split(' ')[0]}</span>
                   <span className="assist-past">{p.stl}stl</span>
                 </button>
-              );
-            })}
+              ))}
+            </div>
+          </div>
+          <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
+        </div>
+      </div>
+    );
+  }
+
+  // step === 'forcer': quem forçou a infração/outros
+  return (
+    <div className="confirm-overlay">
+      <div className="confirm-modal" style={{maxWidth:'380px',width:'94%'}}>
+        <div className="confirm-title">Quem forçou o turnover?</div>
+        <div style={{padding:'0 0 8px'}}>
+          <button className="assist-none-btn" onClick={() => onType(toType, null)}>Ninguém / Não identificado</button>
+          {eligible.length === 0 && <div style={{padding:'12px 4px',color:'var(--muted)',textAlign:'center'}}>Nenhum atleta em quadra</div>}
+          <div className="assist-players-grid" style={{marginTop:'8px'}}>
+            {eligible.map((p, i) => (
+              <button key={i} className="assist-player-btn"
+                onClick={() => onType(toType, activeTeamPlayers.indexOf(p))}>
+                <span className="assist-pnum">#{p.number}</span>
+                <span className="assist-pname">{p.name.split(' ')[0]}</span>
+              </button>
+            ))}
           </div>
         </div>
         <button className="confirm-cancel" onClick={onCancel}>Cancelar</button>
@@ -1927,8 +1950,11 @@ export default function App() {
       });
 
       const pl = g.teams[teamIdx].players[pIdx];
-      const stealerLabel = stealerIdx !== null
-        ? ` (roubo: #${g.teams[oppIdx].players[stealerIdx].number})`
+      const oppPlayer = stealerIdx !== null ? g.teams[oppIdx].players[stealerIdx] : null;
+      const stealerLabel = oppPlayer
+        ? toType === 'roubo'
+          ? ` (roubo: #${oppPlayer.number} ${oppPlayer.name.split(' ')[0]})`
+          : ` (forçado: #${oppPlayer.number} ${oppPlayer.name.split(' ')[0]})`
         : toType === 'roubo' ? ' (roubo)' : toType === 'infracao' ? ' (infração)' : ' (outros)';
 
       const entry = { id:Date.now(), q:getQuarterLabel(g.quarter), time:fmtTime(g.clock),
