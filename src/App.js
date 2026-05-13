@@ -17,6 +17,7 @@ const INITIAL_PLAYER = () => ({
   fouls: 0, techFouls: 0, foulsReceived: 0,
   plusMinus: 0,
   timeOnCourt: 0,
+  timePerQuarter: [],
   entryTime: null,
   shots: [],
   possessions: 0
@@ -1719,8 +1720,11 @@ export default function App() {
         ...t,
         players: t.players.map(p => {
           if (!p.active || p.entryTime === null) return p;
-          const elapsed = p.entryTime - now;
-          return { ...p, timeOnCourt: (p.timeOnCourt||0)+Math.max(elapsed,0), entryTime: now };
+          const safe = Math.max(p.entryTime - now, 0);
+          const tpq = [...(p.timePerQuarter||[])];
+          while (tpq.length <= g.quarter) tpq.push(0);
+          tpq[g.quarter] = (tpq[g.quarter]||0) + safe;
+          return { ...p, timeOnCourt: (p.timeOnCourt||0)+safe, timePerQuarter: tpq, entryTime: now };
         })
       }));
       return { ...g, teams };
@@ -2023,8 +2027,25 @@ export default function App() {
   const nextQuarter = useCallback(() => {
     setGame(g => {
       if (!g) return g;
-      const nextQ = g.quarter + 1;
+      const currentQ = g.quarter;
+      const nextQ    = currentQ + 1;
       const nextClock = nextQ >= 4 ? 300 : 600;
+
+      // Acumula o tempo restante do quarto atual para cada jogador em quadra
+      // antes de avançar o quarter (g.clock pode ser 0 se o tempo zerou)
+      const teams = g.teams.map(t => ({
+        ...t,
+        players: t.players.map(p => {
+          if (!p.active || p.entryTime === null) return p;
+          const safe = Math.max(p.entryTime - g.clock, 0);
+          const tpq = [...(p.timePerQuarter||[])];
+          while (tpq.length <= currentQ) tpq.push(0);
+          tpq[currentQ] = (tpq[currentQ]||0) + safe;
+          // Reseta entryTime para o início do próximo quarto
+          return { ...p, timeOnCourt:(p.timeOnCourt||0)+safe, timePerQuarter:tpq, entryTime:nextClock };
+        })
+      }));
+
       let teamFouls = g.teamFouls || [[0,0,0,0,0],[0,0,0,0,0]];
       teamFouls = teamFouls.map(tf => {
         const arr = [...tf];
@@ -2032,7 +2053,7 @@ export default function App() {
         if (nextQ < 4) arr[nextQ] = 0;
         return arr;
       });
-      return { ...g, quarter: nextQ, clock: nextClock, teamFouls };
+      return { ...g, quarter: nextQ, clock: nextClock, teamFouls, teams };
     });
     setRunning(false);
   }, []);
@@ -2049,8 +2070,11 @@ export default function App() {
           ...t,
           players: t.players.map((p, pi) => {
             if (pi === outIdx) {
-              const elapsed = running && p.entryTime !== null ? p.entryTime - g.clock : 0;
-              return { ...p, active:false, entryTime:null, timeOnCourt:(p.timeOnCourt||0)+Math.max(elapsed,0) };
+              const safe = Math.max(running && p.entryTime !== null ? p.entryTime - g.clock : 0, 0);
+              const tpq = [...(p.timePerQuarter||[])];
+              while (tpq.length <= g.quarter) tpq.push(0);
+              tpq[g.quarter] = (tpq[g.quarter]||0) + safe;
+              return { ...p, active:false, entryTime:null, timeOnCourt:(p.timeOnCourt||0)+safe, timePerQuarter:tpq };
             }
             if (pi === inIdx) return { ...p, active:true, entryTime: running ? g.clock : null };
             return p;
