@@ -67,7 +67,6 @@ const MISC_ACTIONS = [
   { id:'blk',          label:'Toco',          pts:0, color:'#8b5cf6' },
   { id:'to',           label:'Turnov.',       pts:0, color:'#ef4444' },
   { id:'fouls',        label:'Falta',         pts:0, color:'#f97316' },
-  { id:'foulsReceived',label:'Falta Sofrida', pts:0, color:'#c084fc' },
 ];
 
 const fmtTime = s => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
@@ -592,7 +591,10 @@ function FTReboundModal({ attackingPlayers, onOwnRebound, onOpponentRebound, onC
 }
 
 // ─── FoulModal ────────────────────────────────────────────────────────────────
-function FoulModal({ player, teamFoulsInQuarter, onType, onCancel }) {
+function FoulModal({ player, teamFoulsInQuarter, oppPlayers, onType, onCancel }) {
+  const [step, setStep]           = useState('type');   // 'type' | 'receiver'
+  const [chosenFoul, setChosenFoul] = useState(null);   // { id, isTech }
+
   const bonus = teamFoulsInQuarter >= TEAM_FOUL_BONUS;
   const disq  = player.fouls >= FOUL_DISQUALIFY - 1;
   const types = [
@@ -602,6 +604,48 @@ function FoulModal({ player, teamFoulsInQuarter, onType, onCancel }) {
     { id:'flagrante',      label:'Flagrante',         desc:'Contato excessivo',       color:'#dc2626', isTech: true  },
     { id:'ofensiva',       label:'Ofensiva',          desc:'Carga / Empurrão / Bloqueio ilegal', color:'#fb923c', isTech: false },
   ];
+
+  const activeopp = (oppPlayers || []).filter(p => p.active && p.fouls < FOUL_DISQUALIFY);
+
+  const handleTypeClick = (t) => {
+    setChosenFoul(t);
+    setStep('receiver');
+  };
+
+  if (step === 'receiver') {
+    return (
+      <div className="confirm-overlay">
+        <div className="confirm-modal" style={{maxWidth:'380px',width:'94%'}}>
+          <div className="confirm-title">Quem sofreu a falta?</div>
+          <div style={{padding:'0 0 8px'}}>
+            <div style={{display:'flex',flexDirection:'column',gap:'6px',marginBottom:'8px'}}>
+              {activeopp.map((p, pi) => (
+                <button
+                  key={pi}
+                  className="foul-type-btn"
+                  style={{'--fc':'#c084fc'}}
+                  onClick={() => onType(chosenFoul.id, chosenFoul.isTech, (oppPlayers||[]).indexOf(p))}
+                >
+                  <span className="foul-type-label">#{p.number} {p.name.split(' ')[0]}</span>
+                  <span className="foul-type-desc">FS: {p.foulsReceived||0}</span>
+                </button>
+              ))}
+              <button
+                className="foul-type-btn"
+                style={{'--fc':'#64748b'}}
+                onClick={() => onType(chosenFoul.id, chosenFoul.isTech, null)}
+              >
+                <span className="foul-type-label">Ninguém</span>
+                <span className="foul-type-desc">Não registrar falta sofrida</span>
+              </button>
+            </div>
+          </div>
+          <button className="confirm-cancel" onClick={() => setStep('type')}>← Voltar</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="confirm-overlay">
       <div className="confirm-modal" style={{maxWidth:'380px',width:'94%'}}>
@@ -617,7 +661,7 @@ function FoulModal({ player, teamFoulsInQuarter, onType, onCancel }) {
           </div>
           <div className="foul-types-grid">
             {types.map(t => (
-              <button key={t.id} className="foul-type-btn" style={{'--fc':t.color}} onClick={() => onType(t.id, t.isTech)}>
+              <button key={t.id} className="foul-type-btn" style={{'--fc':t.color}} onClick={() => handleTypeClick(t)}>
                 <span className="foul-type-label">{t.label}</span>
                 <span className="foul-type-desc">{t.desc}</span>
               </button>
@@ -2137,7 +2181,7 @@ export default function App() {
   }, [game, activeTeam, running]);
 
   // ── commitFoul ──────────────────────────────────────────────────────────────
-  const commitFoul = useCallback((foulType, isTech) => {
+  const commitFoul = useCallback((foulType, isTech, receiverIdx = null) => {
     if (selectedPlayer === null || !game) return;
     const pl = game.teams[activeTeam].players[selectedPlayer];
     const newFouls     = (pl.fouls||0) + 1;
@@ -2147,6 +2191,7 @@ export default function App() {
     const needsSub     = isDisq || isTechDisq;
     const newTfq       = ((game.teamFouls?.[activeTeam]||[])[game.quarter]||0) + 1;
     const nowBonus     = newTfq >= TEAM_FOUL_BONUS;
+    const oppTeamIdx   = 1 - activeTeam;
 
     setGameWithUndo(g => {
       const teamFouls = (g.teamFouls||[[0,0,0,0,0],[0,0,0,0,0]]).map((tf,ti) => {
@@ -2157,16 +2202,31 @@ export default function App() {
         return arr;
       });
       const teams = g.teams.map((t,ti) => {
-        if (ti !== activeTeam) return t;
-        return { ...t, players: t.players.map((p,pi) => {
-          if (pi !== selectedPlayer) return p;
-          return { ...p, fouls:newFouls, techFouls:newTechFouls, active: isDisq?false:p.active };
-        })};
+        if (ti === activeTeam) {
+          return { ...t, players: t.players.map((p,pi) => {
+            if (pi !== selectedPlayer) return p;
+            return { ...p, fouls:newFouls, techFouls:newTechFouls, active: isDisq?false:p.active };
+          })};
+        }
+        if (ti === oppTeamIdx && receiverIdx !== null) {
+          return { ...t, players: t.players.map((p,pi) => {
+            if (pi !== receiverIdx) return p;
+            return { ...p, foulsReceived:(p.foulsReceived||0)+1 };
+          })};
+        }
+        return t;
       });
       const entry = { id:Date.now(), q:getQuarterLabel(g.quarter), time:fmtTime(g.clock),
         team:g.teams[activeTeam].name, player:`#${pl.number} ${pl.name.split(' ')[0]}`,
         action:`Falta ${foulType}`, pts:0, color:'#f97316' };
-      const gUpdated = { ...g, teams, teamFouls, log:[entry,...g.log] };
+      const logEntries = [entry];
+      if (receiverIdx !== null) {
+        const recv = g.teams[oppTeamIdx].players[receiverIdx];
+        logEntries.push({ id:Date.now()+1, q:getQuarterLabel(g.quarter), time:fmtTime(g.clock),
+          team:g.teams[oppTeamIdx].name, player:`#${recv.number} ${recv.name.split(' ')[0]}`,
+          action:'Falta Sofrida', pts:0, color:'#c084fc' });
+      }
+      const gUpdated = { ...g, teams, teamFouls, log:[...logEntries,...g.log] };
       // Regras de posse por tipo de falta:
       // - Técnica: posse NÃO muda (LL técnico resolvido separadamente)
       // - Antidesportiva/Flagrante: posse vai para quem SOFREU (adversário do infrator)
@@ -2404,17 +2464,6 @@ export default function App() {
         return endPossession({ ...g, teams, log:[entry,...g.log] }, teamIdx, pIdx);
       });
       showToast(`Roubo — #${game.teams[teamIdx].players[pIdx].number}`);
-      return;
-    }
-
-    if (action.id === 'foulsReceived') {
-      setGameWithUndo(g => {
-        const teams = g.teams.map((t,ti) => ti!==teamIdx?t:{ ...t, players: t.players.map((p,pi) => pi!==pIdx?p:{ ...p, foulsReceived:(p.foulsReceived||0)+1 }) });
-        const pl = g.teams[teamIdx].players[pIdx];
-        const entry = { id:Date.now(), q:getQuarterLabel(g.quarter), time:fmtTime(g.clock), team:g.teams[teamIdx].name, player:`#${pl.number} ${pl.name.split(' ')[0]}`, action:'Falta Sofrida', pts:0, color:'#c084fc' };
-        return endPossession({ ...g, teams, log:[entry,...g.log] }, teamIdx, pIdx);
-      });
-      showToast(`Falta sofrida — #${game.teams[teamIdx].players[pIdx].number}`);
       return;
     }
 
@@ -2695,7 +2744,7 @@ export default function App() {
         />
       )}
       {foulPending && sp && (
-        <FoulModal player={sp} teamFoulsInQuarter={tfq} onType={commitFoul} onCancel={()=>setFoulPending(false)}/>
+        <FoulModal player={sp} teamFoulsInQuarter={tfq} oppPlayers={game.teams[1-activeTeam].players} onType={commitFoul} onCancel={()=>setFoulPending(false)}/>
       )}
       {turnoverPending && (
         <TurnoverModal
