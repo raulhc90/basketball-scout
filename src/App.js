@@ -46,7 +46,7 @@ const DEFAULT_TEAM_B = [
 
 const mkTeam = (name, roster) => ({
   name, score: 0,
-  players: roster.map((p, i) => ({ id: i+1, ...p, active: i < 5, ...INITIAL_PLAYER() }))
+  players: roster.map((p, i) => ({ id: i+1, ...p, active: p.starter !== undefined ? !!p.starter : i < 5, ...INITIAL_PLAYER() }))
 });
 
 const newGame = (nameA='Time A', nameB='Time B', rosterA=DEFAULT_TEAM_A, rosterB=DEFAULT_TEAM_B, homeAttackRight=true) => ({
@@ -1506,7 +1506,7 @@ function TeamsScreen({ teams, onSave, syncStatus, onClose, userId }) {
 }
 
 // ─── NewGameModal ─────────────────────────────────────────────────────────────
-const BLANK_PLAYER = () => ({ number: '', name: '' });
+const BLANK_PLAYER = (starter = false) => ({ number: '', name: '', starter });
 
 function NewGameModal({ onStart, onClose, savedTeams = [] }) {
   const [startingTeam, setStartingTeam]       = useState(0);
@@ -1519,22 +1519,22 @@ function NewGameModal({ onStart, onClose, savedTeams = [] }) {
   const [gameType, setGameType]         = useState('amistoso'); // 'amistoso' | 'competicao'
   const [competitionName, setCompetitionName] = useState('');
   const [players, setPlayers] = useState({
-    a: Array.from({length:5}, BLANK_PLAYER),
-    b: Array.from({length:5}, BLANK_PLAYER),
+    a: Array.from({length:5}, () => BLANK_PLAYER(true)),
+    b: Array.from({length:5}, () => BLANK_PLAYER(true)),
   });
 
   const upd = (t,i,f,v) => setPlayers(prev=>({...prev,[t]:prev[t].map((p,j)=>j===i?{...p,[f]:v}:p)}));
-  const addPlayer = t => setPlayers(prev => prev[t].length >= 15 ? prev : ({ ...prev, [t]: [...prev[t], BLANK_PLAYER()] }));
+  const addPlayer = t => setPlayers(prev => prev[t].length >= 15 ? prev : ({ ...prev, [t]: [...prev[t], BLANK_PLAYER(false)] }));
   const removePlayer = (t,i) => setPlayers(prev => ({ ...prev, [t]: prev[t].filter((_,j) => j !== i) }));
 
   // Carregar time salvo
   const loadTeam = (key, team) => {
     if (key === 'a') {
       setNameA(team.name);
-      setPlayers(prev => ({ ...prev, a: team.players.map(p => ({ number: p.number, name: p.name })) }));
+      setPlayers(prev => ({ ...prev, a: team.players.map((p, i) => ({ number: p.number, name: p.name, starter: i < 5 })) }));
     } else {
       setNameB(team.name);
-      setPlayers(prev => ({ ...prev, b: team.players.map(p => ({ number: p.number, name: p.name })) }));
+      setPlayers(prev => ({ ...prev, b: team.players.map((p, i) => ({ number: p.number, name: p.name, starter: i < 5 })) }));
     }
   };
 
@@ -1543,6 +1543,12 @@ function NewGameModal({ onStart, onClose, savedTeams = [] }) {
     const rosterB = players.b.filter(p => p.number.trim() && p.name.trim());
     if (rosterA.length < 5 || rosterB.length < 5) {
       alert(`Cada time precisa ter ao menos 5 jogadores.\n${rosterA.length < 5 ? nameA+' tem '+rosterA.length+' jogador(es).' : ''}\n${rosterB.length < 5 ? nameB+' tem '+rosterB.length+' jogador(es).' : ''}`);
+      return;
+    }
+    const startersA = rosterA.filter(p => p.starter).length;
+    const startersB = rosterB.filter(p => p.starter).length;
+    if (startersA !== 5 || startersB !== 5) {
+      alert(`Selecione exatamente 5 titulares para cada time.\n${startersA !== 5 ? nameA+': '+startersA+' titular(es) selecionado(s).' : ''}\n${startersB !== 5 ? nameB+': '+startersB+' titular(es) selecionado(s).' : ''}`);
       return;
     }
     const gameTypeData = {
@@ -1571,17 +1577,26 @@ function NewGameModal({ onStart, onClose, savedTeams = [] }) {
                 )}
                 <input className="team-name-input" value={name} onChange={e=>setName(e.target.value)}
                   placeholder={key==='a'?'Time da Casa (esquerda)':'Time Visitante (direita)'}/>
-                <div className="modal-roster-header"><span>#</span><span>Nome</span></div>
+                <div className="modal-roster-header"><span>#</span><span>Nome</span><span title="Titular" style={{textAlign:'center'}}>TIT</span></div>
                 <div className="modal-roster">
-                  {players[key].map((p,i)=>(
+                  {players[key].map((p,i)=>{
+                    const startersCount = players[key].filter(x=>x.starter).length;
+                    const canCheck = p.starter || startersCount < 5;
+                    return (
                     <div key={i} className="modal-player-row">
                       <input className="num-input" value={p.number} maxLength={2} placeholder="#" onChange={e=>upd(key,i,'number',e.target.value)}/>
                       <input className="name-inp" value={p.name} placeholder="Nome" onChange={e=>upd(key,i,'name',e.target.value)}/>
+                      <input type="checkbox" checked={!!p.starter}
+                        disabled={!canCheck}
+                        title={canCheck ? (p.starter ? 'Titular' : 'Marcar como titular') : 'Limite de 5 titulares atingido'}
+                        style={{width:'18px',height:'18px',cursor:canCheck?'pointer':'not-allowed',accentColor:'#22c55e',flexShrink:0}}
+                        onChange={e=>upd(key,i,'starter',e.target.checked)}/>
                       {players[key].length > 1 && (
                         <button className="rm-player-btn" onClick={()=>removePlayer(key,i)} title="Remover">✕</button>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                   {players[key].length < 15 && (
                     <button className="add-player-btn" onClick={()=>addPlayer(key)}>+ Jogador</button>
                   )}
