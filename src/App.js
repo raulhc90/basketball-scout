@@ -2121,6 +2121,16 @@ export default function App() {
   const executeSub = useCallback((inIdx) => {
     if (!game || !subModal) return;
     const outIdx = subModal.outIdx;
+    const teamPlayers = game.teams[activeTeam].players;
+    // Guard: evita phantom substitution
+    if (teamPlayers[inIdx]?.active) {
+      showToast('⚠ Jogador já está em quadra!');
+      return;
+    }
+    if (outIdx !== null && !teamPlayers[outIdx]?.active) {
+      showToast('⚠ Jogador de saída não está em quadra!');
+      return;
+    }
     setGame(g => ({
       ...g,
       teams: g.teams.map((t, ti) => {
@@ -2163,6 +2173,18 @@ export default function App() {
 
   const executeDirectSub = useCallback((outIdx, inIdx) => {
     if (!game) return;
+    const teamPlayers = game.teams[activeTeam].players;
+    // Guard: evita phantom substitution
+    if (teamPlayers[inIdx]?.active) {
+      showToast('⚠ Jogador já está em quadra!');
+      setSubModal(null);
+      return;
+    }
+    if (!teamPlayers[outIdx]?.active) {
+      showToast('⚠ Jogador de saída não está em quadra!');
+      setSubModal(null);
+      return;
+    }
     setGame(g => ({
       ...g,
       teams: g.teams.map((t, ti) => {
@@ -2170,7 +2192,13 @@ export default function App() {
         return {
           ...t,
           players: t.players.map((p, pi) => {
-            if (pi === outIdx) return { ...p, active:false, entryTime:null };
+            if (pi === outIdx) {
+              const safe = Math.max(running && p.entryTime !== null ? p.entryTime - g.clock : 0, 0);
+              const tpq = [...(p.timePerQuarter||[])];
+              while (tpq.length <= g.quarter) tpq.push(0);
+              tpq[g.quarter] = (tpq[g.quarter]||0) + safe;
+              return { ...p, active:false, entryTime:null, timeOnCourt:(p.timeOnCourt||0)+safe, timePerQuarter:tpq };
+            }
             if (pi === inIdx)  return { ...p, active:true,  entryTime: running ? g.clock : null };
             return p;
           })
